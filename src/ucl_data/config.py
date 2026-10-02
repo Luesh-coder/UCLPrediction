@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
 RAW = DATA / "raw"
 PROCESSED = DATA / "processed"
+MODEL = DATA / "model"
 MANUAL = DATA / "manual"
 
 USER_AGENT = "UCLPrediction-data/0.1 (personal, non-commercial research)"

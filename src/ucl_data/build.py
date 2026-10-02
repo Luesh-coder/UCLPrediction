@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from . import config, features as F, sources, tables, teams
+from . import config, features as F, model_data, sources, tables, teams
 
 BASE_COLUMNS = ["match_id", "competition", "season", "season_start", "date", "phase", "round_code", "leg", "tie_id",
                 "is_main_stage", "neutral", "covid_no_fans", "home_id", "away_id", "home_country", "away_country",
@@ -193,7 +193,7 @@ def add_names(df: pd.DataFrame, names: dict[str, str], cols: dict[str, str]) -> 
     return df
 
 
-def validate(m, ties, ts, dom) -> list[str]:
+def validate(m, ties, ts, dom, base) -> list[str]:
     issues = []
     if (n := (m["status"] == "unparsed").sum()):
         issues.append(f"{n} matches with unparsed scores")
@@ -239,10 +239,22 @@ def validate(m, ties, ts, dom) -> list[str]:
            and len(clubs & sets[(lg, s - 1)]) < 0.6 * len(clubs)]
     if low:
         issues.append(f"{len(low)} league-seasons with low club carry-over (possible name mismatch): {low[:5]}")
+
+    # No club can play twice on one day; a clash means a misdated or duplicated match.
+    long = pd.concat([base[["date", "home_id"]].set_axis(["date", "t"], axis=1),
+                      base[["date", "away_id"]].set_axis(["date", "t"], axis=1)])
+    clash = {(t, d.strftime("%Y-%m-%d")) for d, t in long[long.duplicated(keep=False)].itertuples(index=False)}
+    clash -= KNOWN_SAME_DAY_CLASHES
+    if clash:
+        issues.append(f"{len(clash)} clubs with two matches on one date: {sorted(clash)[:5]}")
     return issues
 
 
-def build_all(out_dir=config.PROCESSED) -> dict:
+# Source date errors that cannot be resolved from the data (which of the two games is misdated is unknown).
+KNOWN_SAME_DAY_CLASHES = {("ITA_lecce", "2001-09-22")}  # Brescia-Lecce and Lecce-Juventus, Serie A 2001-02
+
+
+def build_all(out_dir=config.PROCESSED, model_dir=config.MODEL) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     m = tables.build_matches()
     ties = tables.build_ties(m)
@@ -272,17 +284,34 @@ def build_all(out_dir=config.PROCESSED) -> dict:
 
     pair = {"home_id": "home_team", "away_id": "away_team"}
     mf = add_names(mf, names, pair)
-    result = {
-        "ucl_matches": add_names(m, names, pair),
-        "ucl_ties": add_names(ties, names, {"team_a_id": "team_a", "team_b_id": "team_b", "winner_id": "winner"}),
+    # Reference tables keep genuinely unknown facts (e.g. half-time scores the source lacks) as blanks;
+    # columns that are empty, constant or superseded are dropped.
+    reference = {
+        "ucl_matches": add_names(m, names, pair).drop(columns=["tie_winner_raw"]),
+        "ucl_ties": add_names(ties, names, {"team_a_id": "team_a", "team_b_id": "team_b", "winner_id": "winner"})
+        .drop(columns=["source_winner_disagrees"]),
         "ucl_team_seasons": add_names(ts, names, {"team_id": "team"}),
-        "match_features": mf,
-        "ucl_match_features": mf[mf["is_ucl"]],
-        "ucl_team_season_features": tsf,
-        "domestic_matches": add_names(dom, names, pair),
+        "domestic_matches": add_names(dom, names, pair).drop(columns=["time", "round", "stage", "aet_home_goals",
+                                                                      "aet_away_goals"]),
         "domestic_tables": add_names(ctx["dtab"], names, {"team_id": "team"}),
         "teams": team_rows,
     }
-    for name, df in result.items():
+    for name, df in reference.items():
         df.to_csv(out_dir / f"{name}.csv", index=False, date_format="%Y-%m-%d")
-    return result | {"_issues": validate(m, ties, ts, dom)}
+
+    match_train, match_predict, match_dups = model_data.match_tables(mf, pd.Timestamp.today().normalize())
+    ts_train, ts_predict, ts_dups = model_data.team_season_tables(tsf)
+    model = {"match_train": match_train, "match_predict": match_predict,
+             "team_season_train": ts_train, "team_season_predict": ts_predict}
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for name, df in model.items():
+        df.to_csv(model_dir / f"{name}.csv", index=False, date_format="%Y-%m-%d")
+    model_data.write_column_guide(model_dir / "columns.json")
+
+    issues = validate(m, ties, ts, dom, base)
+    issues += model_data.check_complete("match_train", match_train, model_data.MATCH_IDS)
+    issues += model_data.check_complete("match_predict", match_predict, model_data.MATCH_IDS)
+    issues += model_data.check_complete("team_season_train", ts_train, model_data.TEAM_SEASON_IDS)
+    issues += model_data.check_complete("team_season_predict", ts_predict, model_data.TEAM_SEASON_IDS)
+    return reference | {f"model/{k}": v for k, v in model.items()} | {
+        "_issues": issues, "_duplicates_removed": {"matches": match_dups, "team_seasons": ts_dups}}

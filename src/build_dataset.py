@@ -1,4 +1,4 @@
-"""Build the processed CSVs in data/processed from the raw files.
+"""Build data/processed (reference tables) and data/model (model-ready train/predict files).
 
 Usage:  python src/build_dataset.py
 """
@@ -11,6 +11,7 @@ if __name__ == "__main__":
     for name, df in result.items():
         if not name.startswith("_"):
             print(f"{name:26s} {len(df):7d} rows  {df.shape[1]:3d} cols")
+    print("duplicates removed:", result["_duplicates_removed"])
     issues = result["_issues"]
     for issue in issues:
         print("VALIDATION:", issue)

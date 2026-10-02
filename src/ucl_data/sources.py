@@ -70,6 +70,9 @@ def load_openfootball_ucl(min_season: int = config.OPENFOOTBALL_FIRST_SEASON) ->
 # Known errors in engsoccerdata champs.csv: (Date, home, visitor) -> corrected values.
 ENGSOCCERDATA_FIXES = {
     ("2009-04-20", "Internazionale", "Barcelona"): {"Date": "2010-04-20"},  # 2009-10 SF 1st leg, year typo
+    # 1995-96 group A matchday 2 was on 27 Sep (both clubs played league games on the 23rd)
+    ("1995-09-23", "FC Porto", "Aalborg BK"): {"Date": "1995-09-27"},
+    ("1995-09-23", "Panathinaikos", "Nantes"): {"Date": "1995-09-27"},
 }
 
 _ES_ROUNDS = {"PrelimF": "QPR", "prelim": "QPR", "Round1": "R1", "Round2": "R2", "Q-1": "Q1", "Q-2": "Q2",
@@ -134,6 +137,8 @@ def load_engsoccerdata_ucl(first: int = config.FIRST_SEASON, last: int = config.
 ENGSOCCERDATA_DOMESTIC_NAME_FIXES = {
     ("france", 2015, "AC Ajaccio"): "Gazélec FC Ajaccio",  # Gazélec, not AC Ajaccio, played Ligue 1 in 2015-16
 }
+# (file, season) whose second half (Jan-Jun) is dated a year early in engsoccerdata.
+ENGSOCCERDATA_DOMESTIC_YEAR_FIXES = {("turkey", 2006)}  # 2006-07 Süper Lig matches from 2007 carry 2006 dates
 
 
 def load_engsoccerdata_domestic(first: int = config.HISTORY_FIRST_SEASON) -> pd.DataFrame:
@@ -147,6 +152,11 @@ def load_engsoccerdata_domestic(first: int = config.HISTORY_FIRST_SEASON) -> pd.
             if file == name:
                 for col in ("home", "visitor"):
                     d.loc[(d["Season"] == season) & (d[col] == wrong), col] = right
+        d["Date"] = pd.to_datetime(d["Date"])
+        for file, season in ENGSOCCERDATA_DOMESTIC_YEAR_FIXES:
+            if file == name:
+                early = (d["Season"] == season) & (d["Date"] < pd.Timestamp(f"{season}-07-01"))
+                d.loc[early, "Date"] = d.loc[early, "Date"] + pd.DateOffset(years=1)
         ht = d["HT"].map(_split_score) if "HT" in d else pd.Series([(np.nan, np.nan)] * len(d), index=d.index)
         parts.append(pd.DataFrame(dict(
             season=d["Season"].map(season_label), season_start=d["Season"], league=league, league_name=league_name,
