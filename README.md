@@ -12,9 +12,10 @@ writes clean tables plus leakage-safe, model-ready feature tables to `data/proce
 ### Quickstart
 
 ```bash
-py -3.12 -m pip install -r requirements.txt   # pandas, numpy, requests
+py -3.12 -m pip install -r requirements.txt   # pandas, numpy, requests, scikit-learn
 py -3.12 src/download_data.py                 # fetch/refresh raw files (only changed files are re-downloaded)
 py -3.12 src/build_dataset.py                 # build data/processed + data/model and run validation checks
+py -3.12 src/evaluate_features.py             # choose features/weights by rolling-origin CV (see "Splitting and feature selection")
 ```
 
 > On this machine use Python 3.12: the Python 3.13 install has an experimental MinGW build of
@@ -163,7 +164,7 @@ engsoccerdata seasons); they are left empty rather than invented.
   the `is_ucl`, `comp_*` and `phase_*` flags as features, then evaluate on the UCL rows; targets `result_90` or
   `home_goals`/`away_goals`. Split by `season_start` (train on the past, test on later seasons) to
   avoid leakage. `match_id`, `date`, team names and `competition` are identifiers, not features (the league is encoded in `comp_*`).
-  Predict `match_predict.csv`.
+  Predict `match_predict.csv`. The split, transforms and feature selection are set out below.
 - **Winner model**: either train on `team_season_train.csv` (targets `is_winner`, `reached_*`,
   `stage_score`), or simulate the bracket many times with a match model (Monte Carlo) using
   `data/processed/ucl_ties.csv` for knockout rules.
@@ -172,3 +173,35 @@ engsoccerdata seasons); they are left empty rather than invented.
   every loser does not, that each finished season has exactly one champion, that there are no duplicate or unparsed fixtures,
   that every UCL club from a covered country appears in its own league that season, and that no league
   season loses most of its clubs from one season to the next (the sign of a team-name mismatch).
+
+## Splitting and feature selection (`src/ucl_model/`)
+
+`py -3.12 src/evaluate_features.py` picks the match model's features, model type and sample weights,
+then writes them to `data/model/selected_features.json`. Add `--test` **once**, after every choice is
+final, to score the locked test seasons.
+
+- **Split by season, never by random rows.** Outcomes drift over time (the UCL draw rate fell from about 31 % in
+  1992-95 to 18 % in the 2020s), and a random split would train on matches played after the ones it scores.
+  - *Test (locked)*: 2023-24, 2024-25, 2025-26: 503 UCL main-stage matches, including both league-phase
+    seasons (the 2026-27 format).
+  - *Validation*: rolling origin over 2012-13 → 2022-23. Each fold trains on every earlier season
+    (domestic + UCL) and validates on that season's UCL main-stage matches (~1,370 in total).
+  - *Final model*: refit on everything played so far, then predict `match_predict.csv`.
+- **Transforms** (`transforms.engineer`, row by row with fixed constants, so they cannot leak): drop
+  `ucl_history_seasons` (always 10 after 2002, so it only marks the era); `elo_n` → `log1p(min(n, 200))`;
+  `dom_days_since_last` → `log1p(min(days, 30))`; this-season UCL record shrunk toward neutral with weight
+  `played / (played + 3)`; `phase_group` + `phase_league` → `phase_main_group` (the league phase has only two seasons).
+- **Scaling**: none for tree models. For linear models, `StandardScaler` on non-binary columns inside the
+  sklearn pipeline, so each fold's scaler sees only its own training rows.
+- **Engineered candidates**: `home_exp` (Elo expected score incl. home advantage) and home − away `diff_*`
+  columns. They are kept only if they lower CV log loss by more than one bootstrap standard error.
+- **Selection**: the feature groups in `transforms.FEATURE_GROUPS` (home, away and diff columns stay together)
+  are ranked by grouped permutation importance. Groups whose importance interval reaches 0 are then
+  removed one at a time, and a removal is kept while CV log loss stays within one standard error of the
+  full set. UCL-row and recency sample weights go through the same one-standard-error test.
+- **Metrics**: log loss on UCL main-stage matches (the season simulation needs calibrated probabilities),
+  plus ranked probability score and accuracy, each compared with an Elo-only logistic regression baseline
+  using a paired bootstrap.
+- **Winner model** (`team_season_train.csv`): use the same season split (`splits.rolling_folds` works on that
+  table too). With 34 winners, model `stage_score` / `reached_*` and normalise winner probabilities within
+  each season; the main route is a Monte Carlo season simulation driven by the match model.
