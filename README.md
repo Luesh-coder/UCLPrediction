@@ -164,6 +164,9 @@ engsoccerdata seasons); they are left empty rather than invented.
   `home_goals`/`away_goals`. Split by `season_start` (train on the past, test on later seasons) to
   avoid leakage. `match_id`, `date`, team names and `competition` are identifiers, not features (the league is encoded in `comp_*`).
   Predict `match_predict.csv`.
+  `python src/init_boosting.py` prints round 0 of a gradient-boosted `result_90` model (softmax loss) on a
+  season split (train 1992-93 → 2022-23 by default, `--test-from` to change): initial scores, gradients and
+  Hessians, from `src/ucl_model/boosting.py`.
 - **Winner model**: either train on `team_season_train.csv` (targets `is_winner`, `reached_*`,
   `stage_score`), or simulate the bracket many times with a match model (Monte Carlo) using
   `data/processed/ucl_ties.csv` for knockout rules.
