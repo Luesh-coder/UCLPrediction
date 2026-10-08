@@ -61,3 +61,7 @@ ENGSOCCERDATA = {
 FIRST_SEASON = 1992  # Champions League era starts in 1992-93
 OPENFOOTBALL_FIRST_SEASON = 2011  # UCL seasons before this come from engsoccerdata
 HISTORY_FIRST_SEASON = 1955  # European Cup and domestic history from here warm up the Elo ratings
+
+# Chronological model split by season_start: train < VALID_FIRST_SEASON <= valid < TEST_FIRST_SEASON <= test.
+VALID_FIRST_SEASON = 2023  # 2023-24 and 2024-25 (first league-phase season)
+TEST_FIRST_SEASON = 2025  # 2025-26, same format as the 2026-27 target

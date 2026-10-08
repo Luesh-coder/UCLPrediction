@@ -55,10 +55,24 @@ targets and features of each file, so `X = df[guide["match"]["features"]]` gives
 
 | File | Rows | What it is for |
 |---|---|---|
-| `match_train.csv` | every played match since 1992-93: UCL + 12 domestic top flights (~122k) | **Match model** training data: targets `home_goals`, `away_goals`, `result_90` (0 = away win, 1 = draw, 2 = home win) + pre-match features |
+| `match_all.csv` | every played match since 1992-93: UCL + 12 domestic top flights (~122k) | **Match model** data: targets `home_goals`, `away_goals`, `result_90` (0 = away win, 1 = draw, 2 = home win) + pre-match features |
+| `match_train/valid/test.csv` | `match_all.csv` split by season (see below) | Fit / tune / final evaluation |
 | `match_predict.csv` | upcoming fixtures (today onwards) | Same features, no targets — predict these |
-| `team_season_train.csv` | group/league-phase club × finished season (984) | **Winner model**: features at the start of the main stage + targets `stage_score`, `reached_last16/qf/sf/final`, `is_winner` |
+| `team_season_all.csv` | group/league-phase club × finished season (984) | **Winner model**: features at the start of the main stage + targets `stage_score`, `reached_last16/qf/sf/final`, `is_winner` |
+| `team_season_train/valid/test.csv` | `team_season_all.csv` split by season | Fit / tune / final evaluation |
 | `team_season_predict.csv` | clubs in a season still in progress | Same features, no targets (fills once 2026-27 is published or `ucl_participants.csv` is filled) |
+
+**Split** (chronological on `season_start`, boundaries in `config.VALID_FIRST_SEASON` / `TEST_FIRST_SEASON`;
+the build checks that the parts add up to the `_all` file and do not overlap in seasons):
+
+| Split | Seasons | Matches (UCL main stage) | Team-seasons (winners) |
+|---|---|---|---|
+| train | 1992-93 → 2022-23 | ~110.9k (3,527) | 880 (31) |
+| valid | 2023-24, 2024-25 | ~7.8k (314) | 68 (2) |
+| test | 2025-26 onwards | ~3.4k (189) | 36 (1) |
+
+Test also collects matches of the season in progress once they are played (domestic 2026-27 so far).
+Tune on valid, look at test once, then refit on `*_all.csv` before predicting.
 
 How the files are cleaned (`src/ucl_data/model_data.py`):
 
@@ -159,14 +173,16 @@ engsoccerdata seasons); they are left empty rather than invented.
 
 ### Using it
 
-- **Match model**: train on `data/model/match_train.csv` (about 116.5k domestic + 5.5k UCL matches) with
-  the `is_ucl`, `comp_*` and `phase_*` flags as features, then evaluate on the UCL rows; targets `result_90` or
-  `home_goals`/`away_goals`. Split by `season_start` (train on the past, test on later seasons) to
-  avoid leakage. `match_id`, `date`, team names and `competition` are identifiers, not features (the league is encoded in `comp_*`).
-  Predict `match_predict.csv`.
+- **Match model**: train on `data/model/match_train.csv` with the `is_ucl`, `comp_*` and `phase_*` flags
+  as features, tune on `match_valid.csv` and evaluate on the UCL rows of `match_test.csv`; targets `result_90` or
+  `home_goals`/`away_goals`. Do not shuffle rows across the split files (that leaks future seasons).
+  `match_id`, `date`, team names and `competition` are identifiers, not features (the league is encoded in `comp_*`).
+  Refit on `match_all.csv`, then predict `match_predict.csv`.
 - **Winner model**: either train on `team_season_train.csv` (targets `is_winner`, `reached_*`,
   `stage_score`), or simulate the bracket many times with a match model (Monte Carlo) using
-  `data/processed/ucl_ties.csv` for knockout rules.
+  `data/processed/ucl_ties.csv` for knockout rules. One test season (36 clubs, 1 winner) is too small
+  to score reliably: also evaluate walk-forward on `team_season_all.csv` (train on seasons < s, test on s,
+  for each recent s).
 - **Validation**: `build_dataset.py` checks that the model files have no missing values or duplicate ids,
   that no club plays twice on one day, that every knockout winner appears in the next round and
   every loser does not, that each finished season has exactly one champion, that there are no duplicate or unparsed fixtures,

@@ -299,19 +299,24 @@ def build_all(out_dir=config.PROCESSED, model_dir=config.MODEL) -> dict:
     for name, df in reference.items():
         df.to_csv(out_dir / f"{name}.csv", index=False, date_format="%Y-%m-%d")
 
-    match_train, match_predict, match_dups = model_data.match_tables(mf, pd.Timestamp.today().normalize())
-    ts_train, ts_predict, ts_dups = model_data.team_season_tables(tsf)
-    model = {"match_train": match_train, "match_predict": match_predict,
-             "team_season_train": ts_train, "team_season_predict": ts_predict}
+    match_all, match_predict, match_dups = model_data.match_tables(mf, pd.Timestamp.today().normalize())
+    ts_all, ts_predict, ts_dups = model_data.team_season_tables(tsf)
+    match_split = model_data.split_by_season(match_all)
+    ts_split = model_data.split_by_season(ts_all)
+    model = {"match_all": match_all, **{f"match_{k}": v for k, v in match_split.items()},
+             "match_predict": match_predict,
+             "team_season_all": ts_all, **{f"team_season_{k}": v for k, v in ts_split.items()},
+             "team_season_predict": ts_predict}
     model_dir.mkdir(parents=True, exist_ok=True)
     for name, df in model.items():
         df.to_csv(model_dir / f"{name}.csv", index=False, date_format="%Y-%m-%d")
     model_data.write_column_guide(model_dir / "columns.json")
 
     issues = validate(m, ties, ts, dom, base)
-    issues += model_data.check_complete("match_train", match_train, model_data.MATCH_IDS)
-    issues += model_data.check_complete("match_predict", match_predict, model_data.MATCH_IDS)
-    issues += model_data.check_complete("team_season_train", ts_train, model_data.TEAM_SEASON_IDS)
-    issues += model_data.check_complete("team_season_predict", ts_predict, model_data.TEAM_SEASON_IDS)
+    for name, df in model.items():
+        ids = model_data.MATCH_IDS if name.startswith("match") else model_data.TEAM_SEASON_IDS
+        issues += model_data.check_complete(name, df, ids)
+    issues += model_data.check_split("match", match_split, match_all)
+    issues += model_data.check_split("team_season", ts_split, ts_all)
     return reference | {f"model/{k}": v for k, v in model.items()} | {
         "_issues": issues, "_duplicates_removed": {"matches": match_dups, "team_seasons": ts_dups}}

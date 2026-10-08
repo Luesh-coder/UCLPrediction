@@ -141,6 +141,30 @@ def team_season_tables(tsf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, i
     return train.reset_index(drop=True), predict.reset_index(drop=True), dups
 
 
+def split_by_season(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Chronological train/valid/test split on season_start (boundaries in config)."""
+    s = df["season_start"]
+    masks = {"train": s < config.VALID_FIRST_SEASON,
+             "valid": (s >= config.VALID_FIRST_SEASON) & (s < config.TEST_FIRST_SEASON),
+             "test": s >= config.TEST_FIRST_SEASON}
+    return {k: df[m].reset_index(drop=True) for k, m in masks.items()}
+
+
+def check_split(name: str, parts: dict[str, pd.DataFrame], all_: pd.DataFrame) -> list[str]:
+    """Parts are non-empty, add up to the full table, and are in season order."""
+    issues = []
+    if sum(len(p) for p in parts.values()) != len(all_):
+        issues.append(f"{name}: split sizes do not add up to {len(all_)} rows")
+    empty = [k for k, p in parts.items() if p.empty]
+    if empty:
+        issues.append(f"{name}: empty split(s) {empty}")
+        return issues
+    tr, va, te = (parts[k]["season_start"] for k in ("train", "valid", "test"))
+    if not tr.max() < va.min() <= va.max() < te.min():
+        issues.append(f"{name}: splits overlap in season_start")
+    return issues
+
+
 def check_complete(name: str, df: pd.DataFrame, id_cols: list[str]) -> list[str]:
     issues = []
     na = df.isna().sum()
