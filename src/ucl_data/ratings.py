@@ -118,14 +118,14 @@ class DixonColes:
         self.objective = f  # kept for gradient checks
 
     def expected_goals(self, idx: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Expected (home, away) goals for games rows idx under the current fit. A club without a domestic
-        match in the window takes the league of the domestic match it plays, if any."""
+        """Expected (home, away) goals for games rows idx under the current fit. A club outside the fit
+        window takes the league of the domestic match it plays, if any."""
         mu, hm, he, at, dt, al, dl = self._split(self.p)
         at, dt = at * self.in_window, dt * self.in_window
         h, a = self.h[idx], self.a[idx]
         own = np.where(self.euro[idx], len(self.leagues) - 1, self.lg[idx])
-        lh = np.where(self.team_league[h] == len(self.leagues) - 1, own, self.team_league[h])
-        la = np.where(self.team_league[a] == len(self.leagues) - 1, own, self.team_league[a])
+        lh = np.where(self.in_window[h], self.team_league[h], own)
+        la = np.where(self.in_window[a], self.team_league[a], own)
         euro, home_on = self.euro[idx].astype(float), self.home_on[idx]
         eh = mu + (hm + he * euro) * home_on + at[h] + al[lh] - dt[a] - dl[la]
         ea = mu + at[a] + al[la] - dt[h] - dl[lh]

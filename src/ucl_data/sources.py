@@ -19,6 +19,11 @@ UCL_COLUMNS = [
 ]
 
 
+def empty_frame(dtypes: dict[str, str]) -> pd.DataFrame:
+    """No rows, but the columns and dtypes of a loader's normal output (so concatenation keeps dtypes)."""
+    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in dtypes.items()})
+
+
 def season_label(start: int) -> str:
     return f"{start}-{(start + 1) % 100:02d}"
 
@@ -76,13 +81,15 @@ def load_openfootball_other_uefa() -> pd.DataFrame:
         for m in parse_file(f, start):
             rows.append(dict(m, competition=config.OTHER_UEFA_FILES[f.stem], season=season_label(start),
                              season_start=start, qualifying=f.stem.endswith("q"), neutral=m["round_raw"] == "Final"))
-    cols = ["competition", "season", "season_start", "date", "home_raw", "home_country", "away_raw", "away_country",
-            "home_goals", "away_goals", "status", "qualifying", "neutral"]
-    if not rows:
-        return pd.DataFrame(columns=cols)
+    dtypes = {"competition": "object", "season": "object", "season_start": "int64", "date": "datetime64[ns]",
+              "home_raw": "object", "home_country": "object", "away_raw": "object", "away_country": "object",
+              "home_goals": "float64", "away_goals": "float64", "status": "object", "qualifying": "bool",
+              "neutral": "bool"}
+    if not rows:  # files not downloaded yet (run download_data.py)
+        return empty_frame(dtypes)
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
-    return df[cols]
+    return df[list(dtypes)]
 
 
 # ---------------------------------------------------------------- engsoccerdata (1992-93 to 2010-11)
@@ -230,6 +237,13 @@ def load_footballjson_domestic(leagues: dict = config.DOMESTIC_LEAGUES) -> pd.Da
                 aet_home_goals=et[0] if et else np.nan, aet_away_goals=et[1] if et else np.nan,
                 status=status, source="openfootball",
             ))
+    if not rows:  # files not downloaded yet (run download_data.py)
+        return empty_frame({"season": "object", "season_start": "int64", "league": "object", "league_name": "object",
+                            "country": "object", "date": "datetime64[ns]", "time": "object", "round": "object",
+                            "stage": "object", "home_raw": "object", "away_raw": "object",
+                            **{c: "float64" for c in ["home_goals", "away_goals", "ht_home_goals", "ht_away_goals",
+                                                      "aet_home_goals", "aet_away_goals"]},
+                            "status": "object", "source": "object"})
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     return df

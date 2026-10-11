@@ -49,8 +49,9 @@ class MatchModel:
 
     def predict(self, df: pd.DataFrame) -> dict[str, np.ndarray]:
         """Class probabilities (n x 3) from each predictor and the ensemble."""
-        out = {"hybrid": self.hybrid.predict(_matrix(df, self.features, False)),
-               "plain": self.plain.predict(_matrix(df, self.plain_features, False)),
+        n = len(df)  # xgboost returns shape (0, 0) for no rows, hence the reshape
+        out = {"hybrid": self.hybrid.predict(_matrix(df, self.features, False)).reshape(n, 3),
+               "plain": self.plain.predict(_matrix(df, self.plain_features, False)).reshape(n, 3),
                "dixon_coles": df[DC_PROBS].to_numpy()}
         out["ensemble"] = (out["hybrid"] + out["plain"] + out["dixon_coles"]) / 3
         return out

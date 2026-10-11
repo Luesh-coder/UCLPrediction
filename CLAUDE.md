@@ -5,10 +5,15 @@ Target season: UCL 2026-27.
 
 # Current state
 - **Done**: the data pipeline (`src/ucl_data/`) — downloads open data, harmonises team names, builds
-  leakage-safe features, and writes clean train/valid/test/predict splits with validation checks.
-- **Not started**: the model. `src/training.ipynb`, `src/validation.ipynb` and `src/testing.ipynb`
-  exist but are empty. `xgboost` (and any other ML library) is not yet in `requirements.txt`, which
-  only lists `pandas`, `numpy`, `requests`.
+  leakage-safe features (incl. Elo and weekly Dixon-Coles ratings that also learn from Europa/Conference
+  League and second-tier matches), and writes clean train/valid/test/predict splits with validation checks.
+- **Done**: a first match model (`src/ucl_model/match_model.py`, run with `src/train_match_model.py`):
+  XGBoost with and without the Dixon-Coles columns (UCL rows weighted ×3) averaged with the Dixon-Coles
+  probabilities; writes `data/model/match_predictions.csv`. `src/init_boosting.py` shows boosting round 0.
+  `requirements.txt` includes `scipy` and `xgboost`.
+- **Not started**: the winner model / season simulation. `src/training.ipynb`, `src/validation.ipynb` and
+  `src/testing.ipynb` exist but are empty.
+- Candidate extra data (xG, odds, squad values, lineups) and their terms: `docs/data_sources.md` (not used yet).
 - No web app / front end yet.
 
 `README.md` is the detailed reference for the dataset (sources, licences, every column, cleaning rules,
@@ -20,7 +25,9 @@ Use Python 3.12 on this machine (`py -3.12`): the 3.13 install has a broken nump
 ```bash
 py -3.12 -m pip install -r requirements.txt
 py -3.12 src/download_data.py [--refresh]   # sync raw files into data/raw (only changed files unless --refresh)
-py -3.12 src/build_dataset.py               # build data/processed + data/model; exits 1 if validation fails
+py -3.12 src/build_dataset.py               # build data/processed + data/model; exits 1 if validation fails (~10 min)
+py -3.12 src/train_match_model.py           # fit on train, tune on valid, report valid/test, refit on all, predict
+py -3.12 src/init_boosting.py               # boosting round 0 (initial scores, gradients, Hessians) + baselines
 ```
 
 Scripts import the package as `ucl_data`, so run them from the repo root as `src/<script>.py`
@@ -29,17 +36,23 @@ Scripts import the package as `ucl_data`, so run them from the repo root as `src
 # Layout
 ```
 src/
-  download_data.py, build_dataset.py   CLI entry points
+  download_data.py, build_dataset.py   CLI entry points (data)
+  train_match_model.py, init_boosting.py   CLI entry points (model)
   ucl_data/
     config.py       paths, source repos, league list, split boundaries (VALID_FIRST_SEASON=2023, TEST_FIRST_SEASON=2025)
     download.py     GitHub sync by blob SHA
     sources.py      load raw files into uniform match tables
     openfootball.py parser for openfootball Football.TXT files
-    teams.py        team-name -> stable team_id (aliases in data/manual/team_aliases.csv)
+    teams.py        team-name -> stable team_id (aliases in data/manual/team_aliases.csv, which wins over the
+                    bundled known_aliases.csv of spellings that differ between sources)
     tables.py       UCL matches, knockout ties, team-season outcomes
     features.py     Elo, domestic form, UCL history, association strength (all pre-match only)
+    ratings.py      Dixon-Coles attack/defence ratings, refitted weekly on matches before each week
     model_data.py   fill structural missing values (+ *_missing flags), dedupe, one-hot encode, split
     build.py        orchestrates everything, validate(), build_all()
+  ucl_model/
+    boosting.py     split loaders, softmax gradients/Hessians (round 0)
+    match_model.py  XGBoost hybrid + plain + Dixon-Coles ensemble
   training.ipynb, validation.ipynb, testing.ipynb   (empty, for the model work)
 data/                (gitignored — regenerate with the two scripts)
   raw/        downloaded source files

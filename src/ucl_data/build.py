@@ -58,19 +58,15 @@ def load_other_uefa() -> pd.DataFrame:
     return e
 
 
-def _empty(cols: dict[str, str]) -> pd.DataFrame:
-    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in cols.items()})
-
-
 def load_rating_extras() -> tuple[pd.DataFrame, pd.DataFrame]:
     """(Europa/Conference League matches, second-tier matches) for the ratings; empty when switched off."""
     if not config.RATING_EXTRA_SOURCES:
         common = {"match_id": "object", "season": "object", "season_start": "int64", "date": "datetime64[ns]",
                   "home_id": "object", "away_id": "object", "home_raw": "object", "away_raw": "object",
                   "home_goals": "float64", "away_goals": "float64", "status": "object"}
-        return _empty(common | {"competition": "object", "home_country": "object", "away_country": "object",
-                                "qualifying": "bool", "neutral": "bool"}), \
-            _empty(common | {"league": "object", "country": "object", "source": "object"})
+        return sources.empty_frame(common | {"competition": "object", "home_country": "object",
+                                             "away_country": "object", "qualifying": "bool", "neutral": "bool"}), \
+            sources.empty_frame(common | {"league": "object", "country": "object", "source": "object"})
     return load_other_uefa(), load_domestic(tier=2)
 
 
@@ -339,7 +335,7 @@ def build_all(out_dir=config.PROCESSED, model_dir=config.MODEL) -> dict:
     for name, df in reference.items():
         df.to_csv(out_dir / f"{name}.csv", index=False, date_format="%Y-%m-%d")
 
-    match_all, match_predict, match_dups = model_data.match_tables(mf, pd.Timestamp.today().normalize())
+    match_all, match_predict, match_dups = model_data.match_tables(mf, today)
     ts_all, ts_predict, ts_dups = model_data.team_season_tables(tsf)
     match_split = model_data.split_by_season(match_all)
     ts_split = model_data.split_by_season(ts_all)

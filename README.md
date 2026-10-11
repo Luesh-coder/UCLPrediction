@@ -49,6 +49,9 @@ Europa League, Conference League and second-tier matches only feed the Elo and D
 matches between leagues, and promoted clubs arrive with a rating); they are not training rows. Set
 `RATING_EXTRA_SOURCES = False` in `src/ucl_data/config.py` to leave them out.
 
+Candidate extra sources (xG, betting odds, squad values, lineups) and what their terms allow are
+researched in [docs/data_sources.md](docs/data_sources.md); none of them is used yet.
+
 Football-Data.co.uk is **not** used: its terms restrict use to private league-match prediction and
 exclude automated/AI collection, and it has no Champions League data.
 
@@ -189,12 +192,13 @@ club by club). The manual file wins: a shipped alias is ignored when the manual 
   Predict `match_predict.csv`.
   `python src/train_match_model.py` does this (`src/ucl_model/match_model.py`): XGBoost on all features
   (UCL matches weighted ×3), the same without the Dixon-Coles columns, and the Dixon-Coles probabilities,
-  averaged into an ensemble. It trains on seasons before 2022-23, stops adding trees when 2022-23 stops
-  improving, prints log loss and accuracy on 2023-24 onwards, then retrains on every season and writes
-  `data/model/match_predictions.csv` (`p_away`, `p_draw`, `p_home` and the Dixon-Coles expected goals).
-  `python src/init_boosting.py` prints round 0 of a gradient-boosted `result_90` model (softmax loss) on a
-  season split (train 1992-93 → 2022-23 by default, `--test-from` to change): initial scores, gradients and
-  Hessians, from `src/ucl_model/boosting.py`.
+  averaged into an ensemble. It fits on `match_train.csv`, adds trees until log loss on `match_valid.csv`
+  stops improving, prints log loss and accuracy on valid and test, then refits on `match_all.csv` with the
+  same number of trees and writes `data/model/match_predictions.csv` (`p_away`, `p_draw`, `p_home` and the
+  Dixon-Coles expected goals) for `match_predict.csv`.
+  `python src/init_boosting.py` prints round 0 of a gradient-boosted `result_90` model (softmax loss) on
+  `match_train.csv` (initial scores, gradients and Hessians, from `src/ucl_model/boosting.py`) and the
+  baseline log loss on each split (the round-0 section below).
 - **Winner model**: either train on `team_season_train.csv` (targets `is_winner`, `reached_*`,
   `stage_score`), or simulate the bracket many times with a match model (Monte Carlo) using
   `data/processed/ucl_ties.csv` for knockout rules. One test season (36 clubs, 1 winner) is too small

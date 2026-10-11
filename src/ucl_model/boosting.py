@@ -17,21 +17,22 @@ from ucl_data import config
 
 N_CLASSES = 3
 CLASS_NAMES = ["away", "draw", "home"]  # index = result_90 code
-TEST_FROM_SEASON = 2023  # train on 1992-93 -> 2022-23, test on 2023-24 onwards
+SPLITS = ("train", "valid", "test")  # chronological, boundaries in config (VALID/TEST_FIRST_SEASON)
 
 
-def load_match_train() -> tuple[pd.DataFrame, list[str]]:
-    """data/model/match_train.csv and its feature columns (from columns.json)."""
-    df = pd.read_csv(config.MODEL / "match_train.csv")
-    guide = json.loads((config.MODEL / "columns.json").read_text())
-    return df, guide["match"]["features"]
+def load_match(split: str) -> pd.DataFrame:
+    """data/model/match_{split}.csv: one of SPLITS, "all" (train + valid + test) or "predict"."""
+    return pd.read_csv(config.MODEL / f"match_{split}.csv")
 
 
-def split_by_season(df: pd.DataFrame, test_from: int = TEST_FROM_SEASON) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """(train, test): seasons before `test_from` train, the rest test, so no later match leaks
-    into training."""
-    past = df["season_start"] < test_from
-    return df[past].reset_index(drop=True), df[~past].reset_index(drop=True)
+def match_features() -> list[str]:
+    """Feature columns of the match files (from columns.json)."""
+    return json.loads((config.MODEL / "columns.json").read_text())["match"]["features"]
+
+
+def ucl_main_stage(df: pd.DataFrame) -> np.ndarray:
+    """Rows of UCL group/league-phase and knockout matches (qualifying excluded)."""
+    return ((df["is_ucl"] == 1) & (df["phase_qualifying"] == 0)).to_numpy()
 
 
 def softmax(F: np.ndarray) -> np.ndarray:
