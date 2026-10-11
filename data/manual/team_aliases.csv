@@ -1,0 +1,103 @@
+# Maps a raw team spelling to another spelling of the SAME club (same country). Names that
+# only differ by accents, punctuation or affixes (FC, CF, SK, 04, 1893, ...) are merged
+# automatically by ucl_data.teams.norm_key and do not need an entry here.
+# Deliberately NOT merged (different clubs): FC Santa Coloma / UE Santa Coloma (AND),
+# Sporting CP / Sporting Braga (POR), CD Aves / AVS (POR), SSW Innsbruck / FC Wacker Innsbruck (AUT).
+country,alias,canonical
+AUT,LASK Linz,LASK
+AUT,SC Magna Wiener Neustadt,1. Wiener Neustädter SC
+AUT,FC Trenkwalder Admira,FC Admira Wacker
+AUT,Salzburg,RB Salzburg
+AUT,FC Red Bull Salzburg,RB Salzburg
+AZE,Qarabağ Ağdam FK,Qarabağ FK
+BIH,HSK Zrinjski Mostar,Zrinjski Mostar
+CYP,Pafos FC,Paphos FC
+ESP,Athletic Bilbao,Athletic Club
+ESP,CD Alavés,Deportivo Alavés
+ESP,RC Celta,Celta Vigo
+ESP,Rayo Vallecano de Madrid,Rayo Vallecano
+ESP,Real Betis Balompié,Real Betis
+EST,FCI Levadia,Levadia
+EST,FC Flora,Flora Tallinn
+FRA,ES Troyes AC,ESTAC Troyes
+FRA,RC Lens,Racing Club de Lens
+FRA,Olympique Lyon,Olympique Lyonnais
+FRA,RC Strasbourg Alsace,RC Strasbourg
+GER,Bayern Munich,Bayern München
+GER,Bor. Mönchengladbach,Borussia Mönchengladbach
+GRE,AEK Athen,AEK Athens
+GRE,Olympiacos,Olympiakos Piraeus
+GRE,PAE Olympiakos SFP,Olympiakos Piraeus
+GRE,PAOK Saloniki,PAOK
+HUN,Ferencvárosi TC,Ferencvaros
+ITA,Internazionale,Inter
+ITA,FC Internazionale Milano,Inter
+ITA,Lazio Roma,Lazio
+ITA,UC Sampdoria,Sampdoria
+LTU,FK Žalgiris,Zalgiris Vilnius
+MDA,FC Sheriff,Sheriff Tiraspol
+MNE,Buducnost,FK Budućnost Podgorica
+NED,AZ,AZ Alkmaar
+NED,SC Cambuur-Leeuwarden,SC Cambuur
+NED,Feyenoord Rotterdam,Feyenoord
+NED,NEC,NEC Nijmegen
+NED,PSV,PSV Eindhoven
+NED,SBV Vitesse,Vitesse
+NED,Willem II Tilburg,Willem II
+POL,Legia Warsaw,Legia Warszawa
+POR,Sport Lisboa e Benfica,SL Benfica
+POR,GD Estoril Praia,GD Estoril
+POR,Sporting Clube de Portugal,Sporting CP
+# UEFA and ClubElo treat FCSB as the continuation of Steaua Bucuresti.
+ROU,FCSB,Steaua Bucuresti
+SRB,Partizan Belgrade,Partizan
+SUI,Servette Geneve,Servette FC
+TUR,Atiker Konyaspor,Konyaspor
+TUR,Gazişehir Gaziantep FK,Gaziantep FK
+# engsoccerdata domestic-league spellings -> football.json spellings (mined from fixtures that
+# appear in both sources on the same date with the same score, then reviewed).
+BEL,Beerschot VA,K Beerschot VA
+BEL,Charleroi,Sporting Charleroi
+BEL,Dender,FCV Dender EH
+BEL,Eupen,KAS Eupen
+BEL,Lokeren,Sporting Lokeren
+BEL,Mouscron,Royal Excel Mouscron
+BEL,St Truiden,Sint-Truidense VV
+BEL,Standard,Standard Liège
+BEL,Waregem,SV Zulte Waregem
+BEL,Westerlo,KVC Westerlo
+ESP,CD Alaves,Deportivo Alavés
+FRA,AS Nancy,AS Nancy Lorraine
+FRA,Stade Brest,Stade Brestois 29
+FRA,Stade Rennes,Stade Rennais
+GER,Bor. Monchengladbach,Bor. Mönchengladbach
+GER,RasenBallsport Leipzig,RB Leipzig
+GRE,AEK,AEK Athen
+GRE,Apollon,Apollon Smyrnis
+GRE,Aris,Aris Saloniki
+GRE,Giannina,PAS Giannina
+GRE,Kallithea,GS Kallithea
+GRE,Larisa,AE Lárissa
+GRE,Levadeiakos,Levadiakos
+GRE,OFI,OFI Heraklion
+GRE,Olympiakos,Olympiakos Piraeus
+GRE,Panionios,Panionios GSS
+ITA,Pescara Calcio,Delfino Pescara
+NED,Heracles,Heracles Almelo
+POR,AVS Futebol SAD,AVS
+POR,Chaves,GD Chaves
+POR,Estoril,GD Estoril Praia
+POR,Guimaraes,Vitória Guimarães
+POR,Setubal,Vitória Setúbal
+POR,Sp Braga,Sporting Braga
+POR,Sp Lisbon,Sporting CP
+SCO,Hamilton,Hamilton Academical
+SCO,Hearts,Heart of Midlothian
+TUR,Ad. Demirspor,Adana Demirspor
+TUR,Ankaragucu,MKE Ankaragücü
+TUR,Bodrumspor,Bodrum FK
+TUR,Buyuksehyr,İstanbul Başakşehir
+TUR,Erzurum,BB Erzurumspor
+TUR,Goztep,Göztepe
+TUR,Karagumruk SK,Fatih Karagümrük
+TUR,Rizespor,Çaykur Rizespor

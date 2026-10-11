@@ -1,4 +1,4 @@
-"""Build data/processed (reference tables) and data/model (model-ready train/predict files).
+"""Build data/processed (reference tables) and data/model (model-ready all/train/valid/test/predict files).
 
 Usage:  python src/build_dataset.py
 """

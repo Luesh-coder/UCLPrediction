@@ -61,10 +61,24 @@ targets and features of each file, so `X = df[guide["match"]["features"]]` gives
 
 | File | Rows | What it is for |
 |---|---|---|
-| `match_train.csv` | every played match since 1992-93: UCL + 12 domestic top flights (~122k) | **Match model** training data: targets `home_goals`, `away_goals`, `result_90` (0 = away win, 1 = draw, 2 = home win) + pre-match features |
+| `match_all.csv` | every played match since 1992-93: UCL + 12 domestic top flights (~122k) | **Match model** data: targets `home_goals`, `away_goals`, `result_90` (0 = away win, 1 = draw, 2 = home win) + pre-match features |
+| `match_train/valid/test.csv` | `match_all.csv` split by season (see below) | Fit / tune / final evaluation |
 | `match_predict.csv` | upcoming fixtures (today onwards) | Same features, no targets — predict these |
-| `team_season_train.csv` | group/league-phase club × finished season (984) | **Winner model**: features at the start of the main stage + targets `stage_score`, `reached_last16/qf/sf/final`, `is_winner` |
+| `team_season_all.csv` | group/league-phase club × finished season (984) | **Winner model**: features at the start of the main stage + targets `stage_score`, `reached_last16/qf/sf/final`, `is_winner` |
+| `team_season_train/valid/test.csv` | `team_season_all.csv` split by season | Fit / tune / final evaluation |
 | `team_season_predict.csv` | clubs in a season still in progress | Same features, no targets (fills once 2026-27 is published or `ucl_participants.csv` is filled) |
+
+**Split** (chronological on `season_start`, boundaries in `config.VALID_FIRST_SEASON` / `TEST_FIRST_SEASON`;
+the build checks that the parts add up to the `_all` file and do not overlap in seasons):
+
+| Split | Seasons | Matches (UCL main stage) | Team-seasons (winners) |
+|---|---|---|---|
+| train | 1992-93 → 2022-23 | ~110.9k (3,527) | 880 (31) |
+| valid | 2023-24, 2024-25 | ~7.8k (314) | 68 (2) |
+| test | 2025-26 onwards | ~3.4k (189) | 36 (1) |
+
+Test also collects matches of the season in progress once they are played (domestic 2026-27 so far).
+Tune on valid, look at test once, then refit on `*_all.csv` before predicting.
 
 How the files are cleaned (`src/ucl_data/model_data.py`):
 
@@ -183,9 +197,50 @@ club by club). The manual file wins: a shipped alias is ignored when the manual 
   Hessians, from `src/ucl_model/boosting.py`.
 - **Winner model**: either train on `team_season_train.csv` (targets `is_winner`, `reached_*`,
   `stage_score`), or simulate the bracket many times with a match model (Monte Carlo) using
-  `data/processed/ucl_ties.csv` for knockout rules.
+  `data/processed/ucl_ties.csv` for knockout rules. One test season (36 clubs, 1 winner) is too small
+  to score reliably: also evaluate walk-forward on `team_season_all.csv` (train on seasons < s, test on s,
+  for each recent s).
 - **Validation**: `build_dataset.py` checks that the model files have no missing values or duplicate ids,
   that no club plays twice on one day, that every knockout winner appears in the next round and
   every loser does not, that each finished season has exactly one champion, that there are no duplicate or unparsed fixtures,
   that every UCL club from a covered country appears in its own league that season, and that no league
   season loses most of its clubs from one season to the next (the sign of a team-name mismatch).
+
+### Match model: boosting starting point (round 0)
+
+Gradient boosting on `result_90` with the softmax cross-entropy (log) loss. Before any tree is fitted, every
+match gets the same scores F0 = log(class frequency in `match_train.csv`), so the starting probabilities
+p0 = softmax(F0) are just the training frequencies. Values below are computed from `match_train.csv`
+(1992-93 → 2022-23, 110,859 matches).
+
+| | Away win (0) | Draw (1) | Home win (2) |
+|---|---|---|---|
+| Training matches | 30,840 | 28,235 | 51,784 |
+| Starting score F0 = log p0 | −1.2794 | −1.3677 | −0.7612 |
+| Starting probability p0 | 0.2782 | 0.2547 | 0.4671 |
+| Hessian h = p0 (1 − p0), same for every match | 0.2008 | 0.1898 | 0.2489 |
+
+Gradient g = p0 − onehot(result_90). At round 0 it depends only on the actual result:
+
+| Actual result | g_away | g_draw | g_home |
+|---|---|---|---|
+| Away win | −0.7218 | +0.2547 | +0.4671 |
+| Draw | +0.2782 | −0.7453 | +0.4671 |
+| Home win | +0.2782 | +0.2547 | −0.5329 |
+
+Log loss of the starting prediction, the baseline a model has to beat:
+
+| Split | All matches | UCL main stage |
+|---|---|---|
+| train | 1.0598 | 1.0487 |
+| valid | 1.0754 | 1.0352 |
+| test | 1.0769 | 1.0376 |
+
+Notes:
+- Only the gaps between the three scores matter (adding a constant to all three leaves p0 unchanged).
+- Moving the train/valid boundary anywhere from 2019 to 2025 changes F0 by at most 0.026.
+- The start pools domestic and UCL matches; UCL alone has fewer draws (22.9 % vs 25.6 %) and more home
+  wins (49.3 % vs 46.6 %), which the `is_ucl` feature lets the trees pick up.
+- h is the diagonal of the 3 × 3 Hessian, the part tree boosting uses. Libraries rescale it (XGBoost uses
+  2 p (1 − p), LightGBM K/(K − 1) p (1 − p)), so their internal values differ by that factor.
+alcude

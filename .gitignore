@@ -1,2 +1,10 @@
-.claude
-data
+.claude/
+
+# generated data (rebuild with download_data.py + build_dataset.py)
+data/*
+!data/manual/
+
+# python
+__pycache__/
+*.pyc
+.venv/
