@@ -49,6 +49,9 @@ Europa League, Conference League and second-tier matches only feed the Elo and D
 matches between leagues, and promoted clubs arrive with a rating); they are not training rows. Set
 `RATING_EXTRA_SOURCES = False` in `src/ucl_data/config.py` to leave them out.
 
+Candidate extra sources (xG, betting odds, squad values, lineups) and what their terms allow are
+researched in [docs/data_sources.md](docs/data_sources.md); none of them is used yet.
+
 Football-Data.co.uk is **not** used: its terms restrict use to private league-match prediction and
 exclude automated/AI collection, and it has no Champions League data.
 

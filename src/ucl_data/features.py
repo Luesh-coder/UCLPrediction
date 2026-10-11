@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from . import teams
+from . import config, teams
 
 # Elo over domestic top flights and European matches together (in the style of ClubElo): league
 # results rank clubs within a league, European results calibrate the leagues against each other.
@@ -27,8 +27,8 @@ class Elo:
     """Sequential Elo over all matches, recording each club's rating before every match.
 
     A club new to a league starts at the mean rating of the clubs that left that league after
-    the previous season (i.e. the relegated clubs it replaces); otherwise at its association's
-    mean minus ELO_NEWCOMER_GAP.
+    the previous season (i.e. the relegated clubs it replaces, not those promoted from a second
+    tier); otherwise at its association's mean minus ELO_NEWCOMER_GAP.
     """
 
     def __init__(self, league_teams: dict[tuple[str, int], set[str]]) -> None:
@@ -48,6 +48,8 @@ class Elo:
             key = (league, season)
             if key not in self._newcomer:
                 gone = self.league_teams.get((league, season - 1), set()) - self.league_teams.get(key, set())
+                if league in config.SECOND_TIERS:  # clubs promoted to the top flight are not replaced
+                    gone -= self.league_teams.get((league[:-1] + "1", season), set())
                 vals = [self.rating[t] for t in gone if t in self.rating]
                 self._newcomer[key] = float(np.mean(vals)) if vals else (
                     am - ELO_NEWCOMER_GAP if am is not None else ELO_INIT)
