@@ -1,0 +1,79 @@
+# Spellings that differ between the bundled sources (engsoccerdata vs openfootball, top flights vs second
+# tiers vs Europa/Conference League), each checked by two independent reviewers. data/manual/team_aliases.csv
+# overrides these (see teams.load_aliases).
+country,alias,canonical
+AUT,FC Trenkwalder Admira,FC Admira Wacker
+AUT,SC Magna Wiener Neustadt,1. Wiener Neustädter SC
+BEL,FCV Dender EH,Dender
+BEL,K Beerschot VA,Beerschot VA
+BEL,KAS Eupen,Eupen
+BEL,KVC Westerlo,Westerlo
+BEL,Mouscron-Peruwelz,Mouscron
+BEL,Royal Excel Mouscron,Mouscron
+BEL,SV Zulte Waregem,Waregem
+BEL,Sint-Truidense VV,St Truiden
+BEL,Sporting Charleroi,Charleroi
+BEL,Sporting Lokeren,Lokeren
+BEL,Standard Liege,Standard
+BEL,Standard Liège,Standard
+ESP,Athletic Club,Athletic Bilbao
+ESP,Deportivo Alavés,CD Alaves
+ESP,Rayo Vallecano de Madrid,Rayo Vallecano
+ESP,Real Betis Balompié,Real Betis
+FRA,AS Nancy Lorraine,AS Nancy
+FRA,ATAC Troyes,ESTAC Troyes
+FRA,Montpellier La Paillade SC,Montpellier HSC
+FRA,Olympique Lyonnais,Olympique Lyon
+FRA,RC Strasbourg Alsace,RC Strasbourg
+FRA,Racing Club de Lens,RC Lens
+FRA,Stade Brestois 29,Stade Brest
+FRA,Stade Rennais,Stade Rennes
+FRA,Stade Rennais FC 1901,Stade Rennes
+FRA,UA Sedan-Torcy,CS Sedan
+GER,Borussia Mönchengladbach,Bor. Monchengladbach
+GER,Frankfurter SG Eintracht,Eintracht Frankfurt
+GER,KFC Uerdingen 05,Bayer 05 Uerdingen
+GER,RB Leipzig,RasenBallsport Leipzig
+GER,TSV 1860 Munchen,1860 Munchen
+GER,TeBe Berlin,Tennis Borussia Berlin
+GRE,AEK Athen,AEK
+GRE,Aris Saloniki,Aris
+GRE,Eth Asteras,Ethnikos Asteras
+GRE,OFI Heraklion,OFI
+GRE,Olympiakos Piraeus,Olympiakos
+GRE,PAOK Saloniki,PAOK
+ITA,Ascoli Picchio FC,Ascoli Calcio
+ITA,FC Internazionale Milano,Inter
+ITA,Lazio,Lazio Roma
+ITA,Pescara Calcio,Delfino Pescara
+ITA,SS Lazio,Lazio Roma
+NED,AZ,AZ Alkmaar
+NED,BVV Den Bosch,FC Den Bosch '67
+NED,FC Den Haag,ADO Den Haag
+NED,FC Den Haag-ADO,ADO Den Haag
+NED,Feyenoord Rotterdam,Feyenoord
+NED,Heracles,Heracles Almelo
+NED,NEC,NEC Nijmegen
+NED,PSV,PSV Eindhoven
+POR,AVS,AVS Futebol SAD
+POR,Desp. Chaves,Chaves
+POR,GD Estoril Praia,Estoril
+POR,Sport Lisboa e Benfica,Benfica
+POR,Sporting Braga,Sp Braga
+POR,Sporting CP,Sp Lisbon
+POR,Sporting Clube de Braga,Sp Braga
+POR,Vitoria Guimaraes,Guimaraes
+POR,Vitória Guimarães,Guimaraes
+SCO,Heart of Midlothian,Hearts
+TUR,Antalya,Antalyaspor
+TUR,Erzurumspor,Erzurum
+TUR,Göztepe,Goztep
+TUR,Çaykur Rizespor,Rizespor
+TUR,İstanbul Başakşehir,Buyuksehyr
+AUT,FC Red Bull Salzburg,RB Salzburg
+AUT,Salzburg,RB Salzburg
+GER,Bayern Munich,Bayern Munchen
+GRE,AEK Athens,AEK
+GRE,Olympiacos,Olympiakos
+ITA,Internazionale,Inter
+POR,Sporting Clube de Portugal,Sp Lisbon

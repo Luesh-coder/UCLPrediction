@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from . import config
+from .ratings import DC_COLUMNS
 
 NEUTRAL_PPG = 1.37  # points per game of an average team
 NEUTRAL_GOALS_PG = 1.34  # goals scored (and conceded) per game of an average team
@@ -32,7 +33,7 @@ RESULT_CODES = {"A": 0, "D": 1, "H": 2}  # result_90: 0 = away win, 1 = draw, 2 
 MATCH_IDS = ["match_id", "date", "season_start", "competition", "home_team", "away_team"]
 MATCH_TARGETS = ["home_goals", "away_goals", "result_90"]
 MATCH_CONTEXT = ["is_ucl"] + list(COMPETITION_COLUMNS.values()) + PHASE_COLUMNS + \
-    ["leg", "neutral", "covid_no_fans", "same_association", "elo_diff", "first_leg_gd"]
+    ["leg", "neutral", "covid_no_fans", "same_association", "elo_diff", "first_leg_gd"] + DC_COLUMNS
 SIDE = ["elo", "elo_n", "dom_ppg_l5", "dom_ppg_l10", "dom_gf_pg_l10", "dom_ga_pg_l10", "dom_days_since_last",
         "dom_prev_ppg", "dom_prev_gd_pg", "dom_prev_rank_pct", "ucl_prev1_stage", "ucl_best_stage_prev5",
         "ucl_main_apps_prev5", "ucl_titles_prev10", "ucl_main_ppg_prev3", "ucl_main_gd_pg_prev3",
