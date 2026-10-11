@@ -1,5 +1,5 @@
 # Project
-Building a Machine Learning Full Stack Project where, using Python and its libraries (NumPy, Pandas, PyTorch, TensorFlow, Scikit-learn) to create a Model that predicts UCL Matches as they come along as well as predict the Overall winner of the UCL Season as more match data from current matches are inputted. I plan to implement this model by building an XGBoost Decision Tree.
+Building a Machine Learning Full Stack Project where, using Python and its libraries (NumPy, Pandas, PyTorch, TensorFlow, Scikit-learn) to create a Model that predicts UCL Matches as they come along as well as predict the Overall winner of the UCL Season as more match data from current matches are inputted. The match model is a hybrid of XGBoost and a Dixon-Coles model.
 
 Target season: UCL 2026-27.
 
@@ -10,7 +10,8 @@ Target season: UCL 2026-27.
 - **Done**: a first match model (`src/ucl_model/match_model.py`, run with `src/train_match_model.py`):
   XGBoost with and without the Dixon-Coles columns (UCL rows weighted ×3) averaged with the Dixon-Coles
   probabilities; writes `data/model/match_predictions.csv`. `src/init_boosting.py` shows boosting round 0.
-  `requirements.txt` includes `scipy` and `xgboost`.
+  `requirements.txt` includes `scipy` and `xgboost`. Ensemble log loss on the UCL main stage: valid 0.8933,
+  test 0.9123 (base rates 1.0352 / 1.0376); full table in README. Test has been looked at: don't tune on it.
 - **Not started**: the winner model / season simulation. `src/training.ipynb`, `src/validation.ipynb` and
   `src/testing.ipynb` exist but are empty.
 - Candidate extra data (xG, odds, squad values, lineups) and their terms: `docs/data_sources.md` (not used yet).
@@ -30,7 +31,7 @@ py -3.12 src/train_match_model.py           # fit on train, tune on valid, repor
 py -3.12 src/init_boosting.py               # boosting round 0 (initial scores, gradients, Hessians) + baselines
 ```
 
-Scripts import the package as `ucl_data`, so run them from the repo root as `src/<script>.py`
+Scripts import the packages as `ucl_data` and `ucl_model`, so run them from the repo root as `src/<script>.py`
 (or have `src` on the path, e.g. notebook kernel started in `src/`).
 
 # Layout
@@ -54,11 +55,13 @@ src/
     boosting.py     split loaders, softmax gradients/Hessians (round 0)
     match_model.py  XGBoost hybrid + plain + Dixon-Coles ensemble
   training.ipynb, validation.ipynb, testing.ipynb   (empty, for the model work)
-data/                (gitignored — regenerate with the two scripts)
+docs/
+  data_sources.md    candidate extra sources (xG, odds, squad values, lineups) and their terms
+data/                (gitignored — regenerate with the two data scripts)
   raw/        downloaded source files
   manual/     team_aliases.csv, ucl_participants.csv (hand-maintained)
   processed/  reference tables (ucl_matches, ucl_ties, ucl_team_seasons, domestic_*, teams)
-  model/      model-ready CSVs + columns.json
+  model/      model-ready CSVs + columns.json; match_predictions.csv (written by train_match_model.py)
 ```
 
 # Modelling data (data/model/)

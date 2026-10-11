@@ -7,12 +7,12 @@ I am building a Machine Learning Model Application that will predict the UEFA Ch
 
 Reproducible data pipeline for predicting UEFA Champions League (UCL) **match results** and the
 **season winner**. It downloads openly licensed data, harmonises team names across sources, and
-writes clean tables plus leakage-safe, model-ready feature tables to `data/processed/`.
+writes clean reference tables to `data/processed/` and leakage-safe, model-ready feature tables to `data/model/`.
 
 ### Quickstart
 
 ```bash
-py -3.12 -m pip install -r requirements.txt   # pandas, numpy, requests
+py -3.12 -m pip install -r requirements.txt   # pandas, numpy, requests, scipy, xgboost
 py -3.12 src/download_data.py                 # fetch/refresh raw files (only changed files are re-downloaded)
 py -3.12 src/build_dataset.py                 # build data/processed + data/model and run validation checks (~10 min)
 py -3.12 src/train_match_model.py             # evaluate the match model and predict upcoming fixtures
@@ -25,7 +25,7 @@ py -3.12 src/train_match_model.py             # evaluate the match model and pre
 
 | Source | Used for | Licence |
 |---|---|---|
-| [openfootball/champions-league](https://github.com/openfootball/champions-league) | UCL 2011-12 → 2025-26 (group/league phase + knockouts), qualifying rounds 2024-25 → 2025-26; Europa League 2020-21 → and Conference League 2021-22 → incl. qualifiers (team ratings only) | CC0 (public domain) |
+| [openfootball/champions-league](https://github.com/openfootball/champions-league) | UCL 2011-12 → 2025-26 (group/league phase + knockouts), qualifying rounds 2024-25 → 2025-26; Europa League 2020-21 → 2024-25 and Conference League 2021-22 → 2024-25, plus both competitions' qualifiers 2024-25 → 2025-26 (team ratings only) | CC0 (public domain) |
 | [jalapic/engsoccerdata](https://github.com/jalapic/engsoccerdata) | UCL 1992-93 → 2010-11 incl. qualifying (`champs.csv`); European Cup 1955-92 and domestic top-flight history up to 2024-25 (Elo warm-up and training data); English and German second tiers up to 2024-25 (team ratings only) | GPL (≥ 2) — fine for private use; check the licence before redistributing derived data |
 | [openfootball/football.json](https://github.com/openfootball/football.json) | Domestic top flights 2025-26 and the current 2026-27 season; Austria from 2010-11; any older season engsoccerdata lacks; second tiers (team ratings only) | CC0 |
 
@@ -43,7 +43,7 @@ football.json (`source` column in `domestic_matches.csv`).
 | Primeira Liga | `pt.1` | 1994-95 → 2026-27 |
 | Belgian Pro League, Greek Super League, Süper Lig, Scottish Premiership | `be.1`, `gr.1`, `tr.1`, `sco.1` | 1994-95 (Belgium 1995-96) → 2025-26 (partial) |
 | Austrian Bundesliga | `at.1` | 2010-11 → 2025-26 (partial) |
-| Second tiers (team ratings only): Championship, 2. Bundesliga, Segunda División, Serie B, Ligue 2 | `en.2`, `de.2`, `es.2`, `it.2`, `fr.2` | England 1955-56, Germany 1974-75, Spain 2012-13, Italy 2013-14, France 2014-15 → current season |
+| Second tiers (team ratings only): Championship, 2. Bundesliga, Segunda División, Serie B, Ligue 2 | `en.2`, `de.2`, `es.2`, `it.2`, `fr.2` | England 1955-56 → 2026-27; Germany 1974-75, Spain 2012-13, Italy 2013-14, France 2014-15 → 2025-26 |
 
 Europa League, Conference League and second-tier matches only feed the Elo and Dixon-Coles ratings (more
 matches between leagues, and promoted clubs arrive with a rating); they are not training rows. Set
@@ -148,7 +148,7 @@ club by club). The manual file wins: a shipped alias is ignored when the manual 
 
 | Prefix (`home_`/`away_` in match features) | Meaning |
 |---|---|
-| `elo`, `elo_n` | Club Elo before the match and number of rated matches. One rating over domestic top flights and second tiers (K=20) and European Cup/UCL/Europa/Conference League matches (K=30) since 1955, home advantage 65, goal-difference multiplier: league games rank clubs within a league, European games calibrate leagues against each other. Promoted clubs start at the rating of the clubs they replace |
+| `elo`, `elo_n` | Club Elo before the match and number of rated matches. One rating over domestic top flights and second tiers (K=20) and European Cup/UCL/Europa/Conference League matches (K=30) since 1955, home advantage 65, goal-difference multiplier: league games rank clubs within a league, European games calibrate leagues against each other. A club new to a league starts at the rating of the clubs relegated from it (clubs promoted from a rated second tier keep their own rating) |
 | `dom_ppg_l5`, `dom_ppg_l10`, `dom_gf_pg_l10`, `dom_ga_pg_l10`, `dom_days_since_last` | Domestic league form over the last 5/10 league games (missing if stale > 150 days) |
 | `dom_prev_ppg`, `dom_prev_gd_pg`, `dom_prev_rank_pct` | Previous domestic season (rank ordered by points per game, then goal difference, scaled 0 = champion … 1 = bottom; approximate for split leagues) |
 | `ucl_prev1_stage`, `ucl_best_stage_prev5`, `ucl_main_apps_prev5`, `ucl_titles_prev10`, `ucl_main_ppg_prev3` | UCL pedigree from previous seasons |
@@ -185,8 +185,8 @@ club by club). The manual file wins: a shipped alias is ignored when the manual 
 
 ### Using it
 
-- **Match model**: train on `data/model/match_train.csv` (about 116.5k domestic + 5.5k UCL matches) with
-  the `is_ucl`, `comp_*` and `phase_*` flags as features, then evaluate on the UCL rows; targets `result_90` or
+- **Match model**: train on `data/model/match_train.csv` (`match_all.csv` holds about 116.5k domestic + 5.5k UCL
+  matches) with the `is_ucl`, `comp_*` and `phase_*` flags as features, then evaluate on the UCL rows; targets `result_90` or
   `home_goals`/`away_goals`. Split by `season_start` (train on the past, test on later seasons) to
   avoid leakage. `match_id`, `date`, team names and `competition` are identifiers, not features (the league is encoded in `comp_*`).
   Predict `match_predict.csv`.
@@ -195,7 +195,7 @@ club by club). The manual file wins: a shipped alias is ignored when the manual 
   averaged into an ensemble. It fits on `match_train.csv`, adds trees until log loss on `match_valid.csv`
   stops improving, prints log loss and accuracy on valid and test, then refits on `match_all.csv` with the
   same number of trees and writes `data/model/match_predictions.csv` (`p_away`, `p_draw`, `p_home` and the
-  Dixon-Coles expected goals) for `match_predict.csv`.
+  Dixon-Coles expected goals) for `match_predict.csv`. Results are in the hybrid model section below.
   `python src/init_boosting.py` prints round 0 of a gradient-boosted `result_90` model (softmax loss) on
   `match_train.csv` (initial scores, gradients and Hessians, from `src/ucl_model/boosting.py`) and the
   baseline log loss on each split (the round-0 section below).
@@ -209,6 +209,36 @@ club by club). The manual file wins: a shipped alias is ignored when the manual 
   every loser does not, that each finished season has exactly one champion, that there are no duplicate or unparsed fixtures,
   that every UCL club from a covered country appears in its own league that season, and that no league
   season loses most of its clubs from one season to the next (the sign of a team-name mismatch).
+
+### Match model: hybrid XGBoost + Dixon-Coles
+
+`src/ucl_model/match_model.py`, run with `py -3.12 src/train_match_model.py` (about 30 s once the data is built).
+Three predictors of `result_90`, averaged with equal weights into the ensemble:
+
+| Predictor | What it is |
+|---|---|
+| `hybrid` | XGBoost on every feature in `columns.json`, including the Dixon-Coles columns (`dc_*`) |
+| `plain` | the same XGBoost without the `dc_*` columns |
+| `dixon_coles` | the Dixon-Coles probabilities themselves (`dc_p_away`, `dc_p_draw`, `dc_p_home`) |
+
+Both boosters use depth-4 trees, learning rate 0.03 and `min_child_weight` 50. Every UCL match (qualifying
+included) counts 3× in training, and the number of trees is chosen by early stopping on valid
+(200 rounds without improvement).
+
+Log loss (lower is better), from the last run on 2026-10-11:
+
+| Predictor | valid, all (7,796) | valid, UCL main stage (314) | test, all (3,417) | test, UCL main stage (189) |
+|---|---|---|---|---|
+| base rates (round 0) | 1.0754 | 1.0352 | 1.0769 | 1.0376 |
+| hybrid (280 trees) | 0.9670 | 0.8964 | 0.9782 | 0.9114 |
+| plain (337 trees) | 0.9682 | 0.9006 | 0.9817 | 0.9209 |
+| Dixon-Coles | 0.9718 | 0.8947 | 0.9837 | 0.9158 |
+| **ensemble** | **0.9670** | **0.8933** | **0.9791** | **0.9123** |
+
+The ensemble's accuracy is 52 % on all test matches and 60 % on the UCL main stage. With a few hundred UCL
+matches per split, differences of about 0.01 between predictors are within noise; every predictor beats the
+base rates clearly. Test has been looked at, so don't tune on it. Retraining on new data can change the
+numbers slightly.
 
 ### Match model: boosting starting point (round 0)
 
@@ -247,4 +277,3 @@ Notes:
   wins (49.3 % vs 46.6 %), which the `is_ucl` feature lets the trees pick up.
 - h is the diagonal of the 3 × 3 Hessian, the part tree boosting uses. Libraries rescale it (XGBoost uses
   2 p (1 − p), LightGBM K/(K − 1) p (1 − p)), so their internal values differ by that factor.
-alcude
