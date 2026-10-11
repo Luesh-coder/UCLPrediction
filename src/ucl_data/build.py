@@ -335,7 +335,7 @@ def build_all(out_dir=config.PROCESSED, model_dir=config.MODEL) -> dict:
     for name, df in reference.items():
         df.to_csv(out_dir / f"{name}.csv", index=False, date_format="%Y-%m-%d")
 
-    match_all, match_predict, match_dups = model_data.match_tables(mf, pd.Timestamp.today().normalize())
+    match_all, match_predict, match_dups = model_data.match_tables(mf, today)
     ts_all, ts_predict, ts_dups = model_data.team_season_tables(tsf)
     match_split = model_data.split_by_season(match_all)
     ts_split = model_data.split_by_season(ts_all)

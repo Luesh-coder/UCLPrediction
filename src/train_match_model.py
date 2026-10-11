@@ -1,61 +1,53 @@
 """Train and evaluate the match model, then predict the upcoming fixtures.
 
-1. Evaluation: train on seasons before --val-season, stop adding trees when the validation season stops
-   improving, and report log loss and accuracy on every later season (all matches and the UCL main stage).
-2. Final model: retrain on every played season with the same number of trees and write
-   data/model/match_predictions.csv (ensemble probabilities for data/model/match_predict.csv).
+Uses the chronological split written by build_dataset.py (data/model/match_{train,valid,test,all}.csv):
+1. Fit on train; trees are added until log loss on valid stops improving (valid picks the tree count).
+2. Report log loss and accuracy on valid and test (all matches and the UCL main stage). Look at test once.
+3. Refit on match_all.csv with the same number of trees and write data/model/match_predictions.csv
+   (ensemble probabilities for data/model/match_predict.csv).
 
-Usage:  python src/train_match_model.py [--val-season 2022]
+Usage:  python src/train_match_model.py
 """
-import argparse
-
 import numpy as np
 import pandas as pd
 
 from ucl_data import config
-from ucl_model.boosting import load_match_train
+from ucl_model.boosting import load_match, match_features, ucl_main_stage
 from ucl_model.match_model import MatchModel, fit, log_loss_probs
 
 
-def evaluate(model: MatchModel, train: pd.DataFrame, test: pd.DataFrame) -> None:
-    """Print log loss and accuracy on the test seasons for each predictor and the base rates."""
+def evaluate(model: MatchModel, train: pd.DataFrame, df: pd.DataFrame, name: str) -> None:
+    """Print log loss and accuracy on df for each predictor and the training base rates."""
     prior = np.bincount(train["result_90"], minlength=3) / len(train)
-    probs = {"base rates": np.tile(prior, (len(test), 1)), **model.predict(test)}
-    ucl_main = ((test["is_ucl"] == 1) & (test["phase_qualifying"] == 0)).to_numpy()
-    y = test["result_90"].to_numpy()
+    probs = {"base rates": np.tile(prior, (len(df), 1)), **model.predict(df)}
+    ucl = ucl_main_stage(df)
+    y = df["result_90"].to_numpy()
     rows = []
-    for name, p in probs.items():
-        row = {"model": name}
-        for subset, mask in [("all", np.ones(len(test), bool)), ("UCL main stage", ucl_main)]:
+    for model_name, p in probs.items():
+        row = {"model": model_name}
+        for subset, mask in [("all", np.ones(len(df), bool)), ("UCL main stage", ucl)]:
             row[f"log loss, {subset}"] = log_loss_probs(y[mask], p[mask])
             row[f"accuracy, {subset}"] = float((p[mask].argmax(1) == y[mask]).mean())
         rows.append(row)
-    print(f"test seasons ({ucl_main.sum()} UCL main-stage matches):")
+    print(f"{name} ({len(df)} matches, {ucl.sum()} UCL main stage):")
     print(pd.DataFrame(rows).set_index("model").round(4).to_string(), "\n")
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--val-season", type=int, default=2022, help="validation season (start year); later seasons are the test")
-    args = ap.parse_args()
+    features = match_features()
+    train, valid, test = load_match("train"), load_match("valid"), load_match("test")
+    if valid.empty:
+        raise SystemExit("match_valid.csv is empty: rebuild with build_dataset.py")
+    print(f"train {len(train)} matches, valid {len(valid)}, test {len(test)}")
 
-    df, features = load_match_train()
-    s = df["season_start"]
-    train, val, test = df[s < args.val_season], df[s == args.val_season], df[s > args.val_season]
-    if val.empty:
-        raise SystemExit(f"no matches in validation season {args.val_season}")
-    print(f"train {len(train)} matches ({s.min()}-{args.val_season - 1}), validation {len(val)} ({args.val_season}), "
-          f"test {len(test)}" + (f" ({args.val_season + 1}-{s.max()})" if len(test) else ""))
-
-    model = fit(train, features, val)
+    model = fit(train, features, valid)
     print(f"trees: hybrid {model.rounds[0]}, plain {model.rounds[1]}\n")
-    if test.empty:
-        print("no seasons after the validation season: evaluation skipped\n")
-    else:
-        evaluate(model, train, test)
+    evaluate(model, train, valid, "valid (also chose the tree counts)")
+    if len(test):
+        evaluate(model, train, test, "test")
 
-    final = fit(df, features, rounds=model.rounds)
-    upcoming = pd.read_csv(config.MODEL / "match_predict.csv")
+    final = fit(load_match("all"), features, rounds=model.rounds)
+    upcoming = load_match("predict")
     out = upcoming[["match_id", "date", "competition", "home_team", "away_team", "dc_home_xg", "dc_away_xg"]].copy()
     p = final.predict(upcoming)["ensemble"] if len(upcoming) else np.empty((0, 3))
     out["p_away"], out["p_draw"], out["p_home"] = p[:, 0], p[:, 1], p[:, 2]
