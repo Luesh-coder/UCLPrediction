@@ -53,7 +53,7 @@ def load_openfootball_ucl(min_season: int = config.OPENFOOTBALL_FIRST_SEASON) ->
     rows = []
     for f in sorted(config.OPENFOOTBALL_UCL["dest"].glob("*/*.txt")):
         start = int(f.parent.name[:4])
-        if start < min_season:
+        if start < min_season or f.stem not in config.UCL_FILES:
             continue
         for m in parse_file(f, start):
             code, group, md = _of_round(m["round_raw"], f.stem)
@@ -63,6 +63,26 @@ def load_openfootball_ucl(min_season: int = config.OPENFOOTBALL_FIRST_SEASON) ->
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     return df[UCL_COLUMNS]
+
+
+def load_openfootball_other_uefa() -> pd.DataFrame:
+    """Europa League (2020-21 on) and Conference League (2021-22 on) matches, qualifiers included.
+    Only used for the team ratings: every match links two associations."""
+    rows = []
+    for f in sorted(config.OPENFOOTBALL_UCL["dest"].glob("*/*.txt")):
+        if f.stem not in config.OTHER_UEFA_FILES:
+            continue
+        start = int(f.parent.name[:4])
+        for m in parse_file(f, start):
+            rows.append(dict(m, competition=config.OTHER_UEFA_FILES[f.stem], season=season_label(start),
+                             season_start=start, qualifying=f.stem.endswith("q"), neutral=m["round_raw"] == "Final"))
+    cols = ["competition", "season", "season_start", "date", "home_raw", "home_country", "away_raw", "away_country",
+            "home_goals", "away_goals", "status", "qualifying", "neutral"]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df[cols]
 
 
 # ---------------------------------------------------------------- engsoccerdata (1992-93 to 2010-11)
@@ -141,13 +161,14 @@ ENGSOCCERDATA_DOMESTIC_NAME_FIXES = {
 ENGSOCCERDATA_DOMESTIC_YEAR_FIXES = {("turkey", 2006)}  # 2006-07 Süper Lig matches from 2007 carry 2006 dates
 
 
-def load_engsoccerdata_domestic(first: int = config.HISTORY_FIRST_SEASON) -> pd.DataFrame:
-    """Top-flight results from engsoccerdata (complete seasons up to 2024-25)."""
+def load_engsoccerdata_domestic(first: int = config.HISTORY_FIRST_SEASON, tier: int = 1) -> pd.DataFrame:
+    """Top-flight (or second-tier) results from engsoccerdata (complete seasons up to 2024-25)."""
     parts = []
-    for name, league in config.ENGSOCCERDATA_LEAGUES.items():
-        country, league_name = config.DOMESTIC_LEAGUES[league]
+    files = config.ENGSOCCERDATA_LEAGUES if tier == 1 else config.ENGSOCCERDATA_SECOND_TIERS
+    for name, league in files.items():
+        country, league_name = config.ALL_LEAGUES[league]
         d = pd.read_csv(config.ENGSOCCERDATA["dest"] / "data-raw" / f"{name}.csv", low_memory=False)
-        d = d[d["tier"].astype(str).isin(["1", "1.0"]) & (d["Season"] >= first)].dropna(subset=["hgoal", "vgoal"])
+        d = d[d["tier"].astype(str).isin([str(tier), f"{tier}.0"]) & (d["Season"] >= first)].dropna(subset=["hgoal", "vgoal"])
         for (file, season, wrong), right in ENGSOCCERDATA_DOMESTIC_NAME_FIXES.items():
             if file == name:
                 for col in ("home", "visitor"):
@@ -169,9 +190,10 @@ def load_engsoccerdata_domestic(first: int = config.HISTORY_FIRST_SEASON) -> pd.
     return pd.concat(parts, ignore_index=True)
 
 
-def load_domestic(first: int = config.HISTORY_FIRST_SEASON) -> pd.DataFrame:
+def load_domestic(first: int = config.HISTORY_FIRST_SEASON, tier: int = 1) -> pd.DataFrame:
     """One source per league-season: engsoccerdata when it is (near) complete, else football.json."""
-    es, fj = load_engsoccerdata_domestic(first), load_footballjson_domestic()
+    leagues = config.DOMESTIC_LEAGUES if tier == 1 else config.SECOND_TIERS
+    es, fj = load_engsoccerdata_domestic(first, tier), load_footballjson_domestic(leagues)
     fj = fj[fj["season_start"] >= first]
     played = pd.concat([df[df["home_goals"].notna()].groupby(["league", "season_start"]).size() for df in (es, fj)],
                        axis=1, keys=["es", "fj"]).fillna(0)
@@ -182,12 +204,14 @@ def load_domestic(first: int = config.HISTORY_FIRST_SEASON) -> pd.DataFrame:
     return out.sort_values(["date", "league", "home_raw"], kind="stable").reset_index(drop=True)
 
 
-def load_footballjson_domestic() -> pd.DataFrame:
-    """Top-flight results from openfootball/football.json (2010-11 onwards, incl. the current season)."""
+def load_footballjson_domestic(leagues: dict = config.DOMESTIC_LEAGUES) -> pd.DataFrame:
+    """Results of `leagues` from openfootball/football.json (2010-11 onwards, incl. the current season)."""
     rows = []
     for f in sorted(config.OPENFOOTBALL_DOMESTIC["dest"].glob("*/*.json")):
         league = f.stem
-        country, league_name = config.DOMESTIC_LEAGUES[league]
+        if league not in leagues:
+            continue
+        country, league_name = leagues[league]
         start = int(f.parent.name[:4])
         for m in json.loads(f.read_text(encoding="utf-8"))["matches"]:
             score = m.get("score")

@@ -2,7 +2,8 @@
 
 Handles round headers (`▪ Group A`, `▪ League, Matchday 3`, `▪ Finals, Round of 16`),
 date lines with an optional year, optional kick-off times, and the score notations
-`2-1 (1-0)`, `0-0`, `3-2 a.e.t. (3-0, 1-0)` and `4-3 pen. 1-1 a.e.t. (1-1, 0-1)`.
+`2-1 (1-0)`, `0-0`, `3-2 a.e.t. (3-0, 1-0)` and `4-3 pen. 1-1 a.e.t. (1-1, 0-1)`; `[awarded]`,
+`[cancelled]` and `[postponed]` matches keep that status and no score.
 """
 from __future__ import annotations
 
@@ -38,7 +39,9 @@ def parse_score(rest: str) -> dict:
     """Split a score string into 90-minute, half-time, extra-time and penalty scores."""
     rest = re.split(r"\s+@\s+", rest)[0].strip()
     out = dict(ft=(None, None), ht=(None, None), aet=(None, None), pen=(None, None), status="played")
-    if not rest:
+    if note := re.search(r"\[(awarded|cancelled|canceled|postponed)\]", rest):
+        out["status"] = note[1].replace("canceled", "cancelled")  # not a result decided on the pitch
+    elif not rest:
         out["status"] = "scheduled"
     elif m := PEN_RE.match(rest):
         g = m.groups()

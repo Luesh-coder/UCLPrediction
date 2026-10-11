@@ -10,14 +10,17 @@ MANUAL = DATA / "manual"
 
 USER_AGENT = "UCLPrediction-data/0.1 (personal, non-commercial research)"
 
-# openfootball/champions-league (CC0): UCL main stage from 2011-12, qualifiers from 2024-25.
+# openfootball/champions-league (CC0): UCL main stage from 2011-12, qualifiers from 2024-25; Europa League
+# from 2020-21 and Conference League from 2021-22 (used only for the team ratings).
 OPENFOOTBALL_UCL = {
     "owner": "openfootball",
     "repo": "champions-league",
     "branch": "master",
-    "pattern": r"^\d{4}-\d{2}/(cl|clq)\.txt$",
+    "pattern": r"^\d{4}-\d{2}/(cl|clq|el|elq|conf|confq)\.txt$",
     "dest": RAW / "openfootball" / "champions-league",
 }
+UCL_FILES = ("cl", "clq")
+OTHER_UEFA_FILES = {"el": "UEL", "elq": "UEL", "conf": "UECL", "confq": "UECL"}  # file stem -> competition
 
 # Top-flight domestic leagues (league code -> association, name). History comes from
 # engsoccerdata, recent seasons from openfootball/football.json (CC0).
@@ -35,11 +38,20 @@ DOMESTIC_LEAGUES = {
     "sco.1": ("SCO", "Premiership"),
     "at.1": ("AUT", "Bundesliga"),
 }
+# Second tiers: only feed the team ratings, so promoted clubs arrive with a rating history.
+SECOND_TIERS = {
+    "en.2": ("ENG", "Championship"),
+    "de.2": ("GER", "2. Bundesliga"),
+    "es.2": ("ESP", "Segunda Division"),
+    "it.2": ("ITA", "Serie B"),
+    "fr.2": ("FRA", "Ligue 2"),
+}
+ALL_LEAGUES = DOMESTIC_LEAGUES | SECOND_TIERS
 OPENFOOTBALL_DOMESTIC = {
     "owner": "openfootball",
     "repo": "football.json",
     "branch": "master",
-    "pattern": r"^\d{4}-\d{2}/(" + "|".join(k.replace(".", r"\.") for k in DOMESTIC_LEAGUES) + r")\.json$",
+    "pattern": r"^\d{4}-\d{2}/(" + "|".join(k.replace(".", r"\.") for k in ALL_LEAGUES) + r")\.json$",
     "dest": RAW / "openfootball" / "football.json",
 }
 
@@ -50,6 +62,7 @@ ENGSOCCERDATA_LEAGUES = {
     "holland": "nl.1", "portugal": "pt.1", "belgium": "be.1", "greece": "gr.1", "turkey": "tr.1",
     "scotland": "sco.1",
 }
+ENGSOCCERDATA_SECOND_TIERS = {"england": "en.2", "germany": "de.2"}  # tier 2 rows of the same files
 ENGSOCCERDATA = {
     "owner": "jalapic",
     "repo": "engsoccerdata",

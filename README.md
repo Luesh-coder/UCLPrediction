@@ -14,7 +14,8 @@ writes clean tables plus leakage-safe, model-ready feature tables to `data/proce
 ```bash
 py -3.12 -m pip install -r requirements.txt   # pandas, numpy, requests
 py -3.12 src/download_data.py                 # fetch/refresh raw files (only changed files are re-downloaded)
-py -3.12 src/build_dataset.py                 # build data/processed + data/model and run validation checks
+py -3.12 src/build_dataset.py                 # build data/processed + data/model and run validation checks (~10 min)
+py -3.12 src/train_match_model.py             # evaluate the match model and predict upcoming fixtures
 ```
 
 > On this machine use Python 3.12: the Python 3.13 install has an experimental MinGW build of
@@ -24,9 +25,9 @@ py -3.12 src/build_dataset.py                 # build data/processed + data/mode
 
 | Source | Used for | Licence |
 |---|---|---|
-| [openfootball/champions-league](https://github.com/openfootball/champions-league) | UCL 2011-12 → 2025-26 (group/league phase + knockouts), qualifying rounds 2024-25 → 2025-26 | CC0 (public domain) |
-| [jalapic/engsoccerdata](https://github.com/jalapic/engsoccerdata) | UCL 1992-93 → 2010-11 incl. qualifying (`champs.csv`); European Cup 1955-92 and domestic top-flight history up to 2024-25 (Elo warm-up and training data) | GPL (≥ 2) — fine for private use; check the licence before redistributing derived data |
-| [openfootball/football.json](https://github.com/openfootball/football.json) | Domestic top flights 2025-26 and the current 2026-27 season; Austria from 2010-11; any older season engsoccerdata lacks | CC0 |
+| [openfootball/champions-league](https://github.com/openfootball/champions-league) | UCL 2011-12 → 2025-26 (group/league phase + knockouts), qualifying rounds 2024-25 → 2025-26; Europa League 2020-21 → and Conference League 2021-22 → incl. qualifiers (team ratings only) | CC0 (public domain) |
+| [jalapic/engsoccerdata](https://github.com/jalapic/engsoccerdata) | UCL 1992-93 → 2010-11 incl. qualifying (`champs.csv`); European Cup 1955-92 and domestic top-flight history up to 2024-25 (Elo warm-up and training data); English and German second tiers up to 2024-25 (team ratings only) | GPL (≥ 2) — fine for private use; check the licence before redistributing derived data |
+| [openfootball/football.json](https://github.com/openfootball/football.json) | Domestic top flights 2025-26 and the current 2026-27 season; Austria from 2010-11; any older season engsoccerdata lacks; second tiers (team ratings only) | CC0 |
 
 Each domestic league-season comes from one source: engsoccerdata when it is complete, otherwise
 football.json (`source` column in `domestic_matches.csv`).
@@ -42,6 +43,11 @@ football.json (`source` column in `domestic_matches.csv`).
 | Primeira Liga | `pt.1` | 1994-95 → 2026-27 |
 | Belgian Pro League, Greek Super League, Süper Lig, Scottish Premiership | `be.1`, `gr.1`, `tr.1`, `sco.1` | 1994-95 (Belgium 1995-96) → 2025-26 (partial) |
 | Austrian Bundesliga | `at.1` | 2010-11 → 2025-26 (partial) |
+| Second tiers (team ratings only): Championship, 2. Bundesliga, Segunda División, Serie B, Ligue 2 | `en.2`, `de.2`, `es.2`, `it.2`, `fr.2` | England 1955-56, Germany 1974-75, Spain 2012-13, Italy 2013-14, France 2014-15 → current season |
+
+Europa League, Conference League and second-tier matches only feed the Elo and Dixon-Coles ratings (more
+matches between leagues, and promoted clubs arrive with a rating); they are not training rows. Set
+`RATING_EXTRA_SOURCES = False` in `src/ucl_data/config.py` to leave them out.
 
 Football-Data.co.uk is **not** used: its terms restrict use to private league-match prediction and
 exclude automated/AI collection, and it has no Champions League data.
@@ -119,7 +125,9 @@ Blanks in the reference tables are facts the sources do not have (e.g. half-time
 engsoccerdata seasons); they are left empty rather than invented.
 
 `team_id` is stable across sources and seasons (e.g. `ITA_inter` covers "Internazionale", "Inter" and
-"FC Internazionale Milano"). Manual merges live in `data/manual/team_aliases.csv`.
+"FC Internazionale Milano"). Manual merges live in `data/manual/team_aliases.csv`;
+`src/ucl_data/known_aliases.csv` ships merges for spellings that differ between the bundled sources (checked
+club by club). The manual file wins: a shipped alias is ignored when the manual file mentions that name.
 
 #### Key definitions
 
@@ -137,13 +145,14 @@ engsoccerdata seasons); they are left empty rather than invented.
 
 | Prefix (`home_`/`away_` in match features) | Meaning |
 |---|---|
-| `elo`, `elo_n` | Club Elo before the match and number of rated matches. One rating over domestic top flights (K=20) and European Cup/UCL matches (K=30) since 1955, home advantage 65, goal-difference multiplier: league games rank clubs within a league, European games calibrate leagues against each other. Promoted clubs start at the rating of the clubs they replace |
+| `elo`, `elo_n` | Club Elo before the match and number of rated matches. One rating over domestic top flights and second tiers (K=20) and European Cup/UCL/Europa/Conference League matches (K=30) since 1955, home advantage 65, goal-difference multiplier: league games rank clubs within a league, European games calibrate leagues against each other. Promoted clubs start at the rating of the clubs they replace |
 | `dom_ppg_l5`, `dom_ppg_l10`, `dom_gf_pg_l10`, `dom_ga_pg_l10`, `dom_days_since_last` | Domestic league form over the last 5/10 league games (missing if stale > 150 days) |
 | `dom_prev_ppg`, `dom_prev_gd_pg`, `dom_prev_rank_pct` | Previous domestic season (rank ordered by points per game, then goal difference, scaled 0 = champion … 1 = bottom; approximate for split leagues) |
 | `ucl_prev1_stage`, `ucl_best_stage_prev5`, `ucl_main_apps_prev5`, `ucl_titles_prev10`, `ucl_main_ppg_prev3` | UCL pedigree from previous seasons |
 | `assoc_ppg_prev5`, `assoc_main_teams` | Association (country) strength: its clubs' points per UCL match over the last 5 seasons; clubs in this season's main stage |
 | `ucl_ss_played`, `ucl_ss_ppg`, `ucl_ss_gd_pg` | This season's main-stage record before the match |
 | `elo_diff`, `first_leg_gd`, `same_association`, `neutral`, `covid_no_fans` | Match context (`first_leg_gd` is set on second legs, from the home side's view) |
+| `dc_home_xg`, `dc_away_xg`, `dc_p_away`, `dc_p_draw`, `dc_p_home` (no side prefix) | Dixon-Coles ratings (`src/ucl_data/ratings.py`): each club's attack and defence strength fitted to goals in all rating matches, older matches weighted down (half-life 240 days, 4-year window), refitted every week on matches before that week. Gives expected goals for each side and win/draw/loss probabilities |
 
 ### Known gaps and caveats
 
@@ -173,11 +182,19 @@ engsoccerdata seasons); they are left empty rather than invented.
 
 ### Using it
 
-- **Match model**: train on `data/model/match_train.csv` with the `is_ucl`, `comp_*` and `phase_*` flags
-  as features, tune on `match_valid.csv` and evaluate on the UCL rows of `match_test.csv`; targets `result_90` or
-  `home_goals`/`away_goals`. Do not shuffle rows across the split files (that leaks future seasons).
-  `match_id`, `date`, team names and `competition` are identifiers, not features (the league is encoded in `comp_*`).
-  Refit on `match_all.csv`, then predict `match_predict.csv`.
+- **Match model**: train on `data/model/match_train.csv` (about 116.5k domestic + 5.5k UCL matches) with
+  the `is_ucl`, `comp_*` and `phase_*` flags as features, then evaluate on the UCL rows; targets `result_90` or
+  `home_goals`/`away_goals`. Split by `season_start` (train on the past, test on later seasons) to
+  avoid leakage. `match_id`, `date`, team names and `competition` are identifiers, not features (the league is encoded in `comp_*`).
+  Predict `match_predict.csv`.
+  `python src/train_match_model.py` does this (`src/ucl_model/match_model.py`): XGBoost on all features
+  (UCL matches weighted ×3), the same without the Dixon-Coles columns, and the Dixon-Coles probabilities,
+  averaged into an ensemble. It trains on seasons before 2022-23, stops adding trees when 2022-23 stops
+  improving, prints log loss and accuracy on 2023-24 onwards, then retrains on every season and writes
+  `data/model/match_predictions.csv` (`p_away`, `p_draw`, `p_home` and the Dixon-Coles expected goals).
+  `python src/init_boosting.py` prints round 0 of a gradient-boosted `result_90` model (softmax loss) on a
+  season split (train 1992-93 → 2022-23 by default, `--test-from` to change): initial scores, gradients and
+  Hessians, from `src/ucl_model/boosting.py`.
 - **Winner model**: either train on `team_season_train.csv` (targets `is_winner`, `reached_*`,
   `stage_score`), or simulate the bracket many times with a match model (Monte Carlo) using
   `data/processed/ucl_ties.csv` for knockout rules. One test season (36 clubs, 1 winner) is too small

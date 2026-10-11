@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from . import config, features as F, model_data, sources, tables, teams
+from . import config, features as F, model_data, ratings, sources, tables, teams
 
 BASE_COLUMNS = ["match_id", "competition", "season", "season_start", "date", "phase", "round_code", "leg", "tie_id",
                 "is_main_stage", "neutral", "covid_no_fans", "home_id", "away_id", "home_country", "away_country",
@@ -36,14 +36,42 @@ def manual_participants(ts: pd.DataFrame) -> pd.DataFrame:
          "n_main_stage_teams"]]
 
 
-def load_domestic() -> pd.DataFrame:
-    """Domestic top-flight matches (from 1955) with team ids and a match_id."""
-    d = sources.load_domestic()
+def load_domestic(tier: int = 1) -> pd.DataFrame:
+    """Domestic top-flight (or second-tier) matches (from 1955) with team ids and a match_id."""
+    d = sources.load_domestic(tier=tier)
     d["home_id"] = [teams.team_id(c, r) for c, r in zip(d["country"], d["home_raw"])]
     d["away_id"] = [teams.team_id(c, r) for c, r in zip(d["country"], d["away_raw"])]
     d["match_id"] = d["league"] + "_" + d["season"] + "_" + \
         (d.groupby(["league", "season"]).cumcount() + 1).map("{:04d}".format)
     return d
+
+
+def load_other_uefa() -> pd.DataFrame:
+    """Europa and Conference League matches with team ids and a match_id (ratings only)."""
+    e = sources.load_openfootball_other_uefa()
+    for side in ("home", "away"):
+        e[f"{side}_country"] = e[f"{side}_country"].map(teams.norm_country)
+        e[f"{side}_id"] = [teams.team_id(c, r) for c, r in zip(e[f"{side}_country"], e[f"{side}_raw"])]
+    e = e.sort_values(["competition", "date", "home_id"], kind="stable").reset_index(drop=True)
+    e["match_id"] = e["competition"] + "_" + e["season"] + "_" + \
+        (e.groupby(["competition", "season"]).cumcount() + 1).map("{:04d}".format)
+    return e
+
+
+def _empty(cols: dict[str, str]) -> pd.DataFrame:
+    return pd.DataFrame({c: pd.Series(dtype=t) for c, t in cols.items()})
+
+
+def load_rating_extras() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(Europa/Conference League matches, second-tier matches) for the ratings; empty when switched off."""
+    if not config.RATING_EXTRA_SOURCES:
+        common = {"match_id": "object", "season": "object", "season_start": "int64", "date": "datetime64[ns]",
+                  "home_id": "object", "away_id": "object", "home_raw": "object", "away_raw": "object",
+                  "home_goals": "float64", "away_goals": "float64", "status": "object"}
+        return _empty(common | {"competition": "object", "home_country": "object", "away_country": "object",
+                                "qualifying": "bool", "neutral": "bool"}), \
+            _empty(common | {"league": "object", "country": "object", "source": "object"})
+    return load_other_uefa(), load_domestic(tier=2)
 
 
 def ucl_base(m: pd.DataFrame) -> pd.DataFrame:
@@ -64,19 +92,22 @@ def domestic_base(dom: pd.DataFrame) -> pd.DataFrame:
     ))[BASE_COLUMNS]
 
 
-def elo_games(m: pd.DataFrame, dom: pd.DataFrame) -> pd.DataFrame:
-    """Every match that feeds the Elo: European Cup 1955-1992, UCL, and domestic top flights."""
+def elo_games(m: pd.DataFrame, dom: pd.DataFrame, uefa: pd.DataFrame, dom2: pd.DataFrame) -> pd.DataFrame:
+    """Every match that feeds the ratings: European Cup 1955-1992, UCL, Europa/Conference League, and
+    domestic top flights and second tiers. `league` is NaN for European matches; `competition` names each."""
     cols = ["match_id", "date", "season_start", "home_id", "away_id", "home_country", "away_country",
             "home_goals", "away_goals", "neutral", "status"]
     ec = sources.load_european_cup_history()
     for side in ("home", "away"):
         ec[f"{side}_country"] = ec[f"{side}_country"].map(teams.norm_country)
         ec[f"{side}_id"] = [teams.team_id(c, r) for c, r in zip(ec[f"{side}_country"], ec[f"{side}_raw"])]
-    d = dom.assign(home_country=dom["country"], away_country=dom["country"], neutral=False)
+    d = pd.concat([dom, dom2], ignore_index=True)
+    d = d.assign(home_country=d["country"], away_country=d["country"], neutral=False)
     return pd.concat([
-        ec[cols].assign(league=np.nan, qualifying=False),
-        m[cols].assign(league=np.nan, qualifying=m["phase"] == "qualifying"),
-        d[cols].assign(league=d["league"], qualifying=False),
+        ec[cols].assign(league=np.nan, qualifying=False, competition="EC"),
+        m[cols].assign(league=np.nan, qualifying=m["phase"] == "qualifying", competition="UCL"),
+        uefa[cols].assign(league=np.nan, qualifying=uefa["qualifying"].astype(bool), competition=uefa["competition"]),
+        d[cols].assign(league=d["league"], qualifying=False, competition=d["league"]),
     ], ignore_index=True)
 
 
@@ -115,7 +146,8 @@ def attach_side(df, side, ctx) -> pd.DataFrame:
 
 
 def match_features(base, m, ties, ctx) -> pd.DataFrame:
-    df = base.merge(ctx["elo"], on="match_id", how="left").reset_index(drop=True)
+    df = base.merge(ctx["elo"], on="match_id", how="left").merge(ctx["dc"], on="match_id", how="left")
+    df = df.reset_index(drop=True)
     df["_row"] = np.arange(len(df))
     for side in ("home", "away"):
         df = attach_side(df, side, ctx)
@@ -131,7 +163,7 @@ def match_features(base, m, ties, ctx) -> pd.DataFrame:
     winner = df["tie_id"].map(ties.set_index("tie_id")["winner_id"])
     df["home_advanced"] = (winner == df["home_id"]).astype(object).where(winner.notna(), None)
     cols = BASE_COLUMNS[:2] + ["is_ucl"] + BASE_COLUMNS[2:] + \
-        ["home_advanced", "same_association", "elo_diff", "first_leg_gd"] + \
+        ["home_advanced", "same_association", "elo_diff", "first_leg_gd"] + ratings.DC_COLUMNS + \
         [f"{s}_{f}" for s in ("home", "away") for f in SIDE_FEATURES]
     return df[cols].sort_values(["date", "match_id"]).reset_index(drop=True)
 
@@ -174,12 +206,15 @@ def team_season_features(m, ts, ctx) -> pd.DataFrame:
         .sort_values(["season_start", "elo"], ascending=[True, False]).reset_index(drop=True)
 
 
-def team_table(m: pd.DataFrame, dom: pd.DataFrame) -> pd.DataFrame:
+def team_table(m: pd.DataFrame, dom: pd.DataFrame, uefa: pd.DataFrame) -> pd.DataFrame:
+    """dom may include second tiers; uefa holds Europa/Conference League matches."""
     parts = []
     for side in ("home", "away"):
         parts.append(pd.DataFrame({"country": m[f"{side}_country"], "raw": m[f"{side}_raw"],
                                    "source": np.where(m["source"] == "openfootball", "openfootball_ucl", "engsoccerdata_ucl"),
                                    "season_start": m["season_start"]}))
+        parts.append(pd.DataFrame({"country": uefa[f"{side}_country"], "raw": uefa[f"{side}_raw"],
+                                   "source": "openfootball_uefa", "season_start": uefa["season_start"]}))
         parts.append(pd.DataFrame({"country": dom["country"], "raw": dom[f"{side}_raw"],
                                    "source": dom["source"] + "_domestic", "season_start": dom["season_start"]}))
     return teams.build_team_table(pd.concat(parts, ignore_index=True))
@@ -261,13 +296,15 @@ def build_all(out_dir=config.PROCESSED, model_dir=config.MODEL) -> dict:
     ts = tables.build_team_seasons(m, ties)
     ts_all = pd.concat([ts, manual_participants(ts)], ignore_index=True)
     dom = load_domestic()
-    team_rows = team_table(m, dom)
+    uefa, dom2 = load_rating_extras()
+    team_rows = team_table(m, pd.concat([dom, dom2], ignore_index=True), uefa)
     names = team_rows.drop_duplicates("team_id").set_index("team_id")["team"].to_dict()
 
     base = pd.concat([ucl_base(m), domestic_base(dom)], ignore_index=True)
     tp = tables.team_perspective(m)
-    league_teams = pd.concat([dom[["league", "season_start", "home_id"]].set_axis(["lg", "s", "t"], axis=1),
-                              dom[["league", "season_start", "away_id"]].set_axis(["lg", "s", "t"], axis=1)]) \
+    both = pd.concat([dom, dom2], ignore_index=True)
+    league_teams = pd.concat([both[["league", "season_start", "home_id"]].set_axis(["lg", "s", "t"], axis=1),
+                              both[["league", "season_start", "away_id"]].set_axis(["lg", "s", "t"], axis=1)]) \
         .groupby(["lg", "s"])["t"].agg(set).to_dict()
     elo_model = F.Elo(league_teams)
     games = F.domestic_team_games(dom)
@@ -276,7 +313,10 @@ def build_all(out_dir=config.PROCESSED, model_dir=config.MODEL) -> dict:
                        ts_all[["team_id", "season_start"]]]).drop_duplicates()
     countries = set(base["home_country"]) | set(base["away_country"]) | set(ts_all["country"])
     seasons = sorted(set(base["season_start"]) | set(ts_all["season_start"]))
-    ctx = dict(names=names, elo_model=elo_model, elo=elo_model.run(elo_games(m, dom)), games=games,
+    today = pd.Timestamp.today().normalize()
+    rating_games = elo_games(m, dom, uefa, dom2)
+    ctx = dict(names=names, elo_model=elo_model, elo=elo_model.run(rating_games), games=games,
+               dc=ratings.rolling_ratings(rating_games, base["match_id"], today),
                dtab=F.domestic_season_tables(games), hist=F.ucl_history(ts_all, tp, pairs, config.FIRST_SEASON),
                assoc=F.association_strength(tp, ts_all, countries, seasons), sofar=season_so_far(base, tp))
     mf = match_features(base, m, ties, ctx)
