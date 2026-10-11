@@ -1,0 +1,7 @@
+# OPTIONAL. League-phase participants for a season whose fixtures are not in the openfootball
+# data yet (e.g. 2026-27). When filled, build_dataset.py adds one row per club to
+# data/model/team_season_predict.csv with pre-season features, ready for prediction.
+# Use a spelling from data/processed/teams.csv (column `raw`) plus its country code so the club
+# maps to its existing team_id (and history). Example row:  2026-27,Arsenal FC,ENG
+# Rows for seasons already present in the match data are ignored.
+season,team,country

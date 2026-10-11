@@ -188,3 +188,42 @@ engsoccerdata seasons); they are left empty rather than invented.
   every loser does not, that each finished season has exactly one champion, that there are no duplicate or unparsed fixtures,
   that every UCL club from a covered country appears in its own league that season, and that no league
   season loses most of its clubs from one season to the next (the sign of a team-name mismatch).
+
+### Match model: boosting starting point (round 0)
+
+Gradient boosting on `result_90` with the softmax cross-entropy (log) loss. Before any tree is fitted, every
+match gets the same scores F0 = log(class frequency in `match_train.csv`), so the starting probabilities
+p0 = softmax(F0) are just the training frequencies. Values below are computed from `match_train.csv`
+(1992-93 → 2022-23, 110,859 matches).
+
+| | Away win (0) | Draw (1) | Home win (2) |
+|---|---|---|---|
+| Training matches | 30,840 | 28,235 | 51,784 |
+| Starting score F0 = log p0 | −1.2794 | −1.3677 | −0.7612 |
+| Starting probability p0 | 0.2782 | 0.2547 | 0.4671 |
+| Hessian h = p0 (1 − p0), same for every match | 0.2008 | 0.1898 | 0.2489 |
+
+Gradient g = p0 − onehot(result_90). At round 0 it depends only on the actual result:
+
+| Actual result | g_away | g_draw | g_home |
+|---|---|---|---|
+| Away win | −0.7218 | +0.2547 | +0.4671 |
+| Draw | +0.2782 | −0.7453 | +0.4671 |
+| Home win | +0.2782 | +0.2547 | −0.5329 |
+
+Log loss of the starting prediction, the baseline a model has to beat:
+
+| Split | All matches | UCL main stage |
+|---|---|---|
+| train | 1.0598 | 1.0487 |
+| valid | 1.0754 | 1.0352 |
+| test | 1.0769 | 1.0376 |
+
+Notes:
+- Only the gaps between the three scores matter (adding a constant to all three leaves p0 unchanged).
+- Moving the train/valid boundary anywhere from 2019 to 2025 changes F0 by at most 0.026.
+- The start pools domestic and UCL matches; UCL alone has fewer draws (22.9 % vs 25.6 %) and more home
+  wins (49.3 % vs 46.6 %), which the `is_ucl` feature lets the trees pick up.
+- h is the diagonal of the 3 × 3 Hessian, the part tree boosting uses. Libraries rescale it (XGBoost uses
+  2 p (1 − p), LightGBM K/(K − 1) p (1 − p)), so their internal values differ by that factor.
+alcude
